@@ -1,0 +1,182 @@
+---
+title: "Production topology"
+description: "Replace in-cluster subcharts with managed services for production deploys"
+icon: "cloud"
+---
+
+The default `fp-site` Helm install bundles in-cluster MariaDB + Redis +
+MinIO subcharts so a `helm install` works on `kind` with zero
+prerequisites. **These defaults are not for production.** This page
+documents the recommended swaps.
+
+## Production swap matrix
+
+| Component | Default (dev / kind) | Recommended for production |
+|---|---|---|
+| Database | `bitnami/mariadb` subchart | [MariaDB Operator](https://github.com/mariadb-operator/mariadb-operator) |
+| HTTP cache | `bitnami/redis` subchart | [DragonflyDB Operator](https://github.com/dragonflydb/dragonfly-operator) |
+| Object storage | `bitnami/minio` subchart | AWS S3 / Cloudflare R2 / GCS XML |
+| WP keys+salts | auto-generated `Job` | [External Secrets Operator](https://external-secrets.io/) |
+
+## Why swap?
+
+<AccordionGroup>
+  <Accordion title="MariaDB Operator vs the bundled subchart" icon="database">
+    The bundled `bitnami/mariadb` is a single-replica `StatefulSet`
+    with no automatic backups, no failover, no point-in-time recovery,
+    and no schema migration tooling. Fine for `kind`, dangerous for
+    production.
+
+    [MariaDB Operator](https://github.com/mariadb-operator/mariadb-operator)
+    provides a declarative `MariaDB` custom resource with replication,
+    backups (Galera, mariabackup, `mysqldump`), `User` / `Database` /
+    `Grant` CRDs, and Galera cluster mode for HA.
+  </Accordion>
+
+  <Accordion title="DragonflyDB vs Redis" icon="dragon">
+    Souin uses the RESP protocol to talk to its cache backend.
+    [DragonflyDB](https://www.dragonflydb.io/) is a drop-in Redis-protocol-compatible
+    in-memory store with **dramatically better single-node throughput**
+    (Dragonfly's docs cite ~25× over Redis on multi-core hardware
+    because of its lock-free shared-nothing architecture).
+
+    The [Dragonfly Operator](https://github.com/dragonflydb/dragonfly-operator)
+    deploys it declaratively. From FrankenPress's perspective it's just
+    a Redis-protocol endpoint — set `externalCache.host` and we don't
+    care what's actually behind the address.
+  </Accordion>
+
+  <Accordion title="AWS S3 (or R2 / GCS) vs in-cluster MinIO" icon="aws">
+    Self-hosted object storage in your cluster is operationally costly
+    (replication, backups, the data plane is on the same critical path
+    as everything else). A managed S3-compatible service (AWS S3,
+    Cloudflare R2, Google Cloud Storage XML, Backblaze B2) takes that
+    operational burden off you and is usually cheaper at WordPress-site
+    scale.
+
+    `humanmade/s3-uploads` (which `fp-mu-plugin` configures) talks the
+    S3 API; it doesn't care which provider answers.
+  </Accordion>
+
+  <Accordion title="External Secrets Operator vs the auto-generated Job" icon="key">
+    The chart's default `keysSalts.autoGenerate: true` runs a one-shot
+    `Job` that creates a `Secret` containing the eight WP auth keys +
+    salts on first install. Fine for instant deploy, but for production
+    you want secrets to live in your cloud secret manager (AWS Secrets
+    Manager, GCP Secret Manager, HashiCorp Vault, 1Password Connect,
+    etc.).
+
+    Set `keysSalts.autoGenerate: false` and `keysSalts.existingSecret:
+    <name>`, then have ESO sync the values into that Secret.
+  </Accordion>
+</AccordionGroup>
+
+## End-to-end production values
+
+```yaml
+# values-prod.yaml
+image:
+  repository: ghcr.io/your-org/your-site
+  tag: v1.0.0
+
+site:
+  url: https://mysite.example.com
+  env: production
+
+replicaCount: 3
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  className: nginx
+  hostname: mysite.example.com
+  tls: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+# --- disable in-cluster subcharts ---
+mariadb:
+  enabled: false
+redis:
+  enabled: false
+minio:
+  enabled: false
+
+# --- production endpoints ---
+externalDatabase:
+  host: mysite-primary.databases.svc.cluster.local  # MariaDB Operator endpoint
+  port: 3306
+  database: mysite
+  user: mysite
+  existingSecret: mysite-db-credentials             # ESO-managed
+  existingSecretPasswordKey: password
+
+externalCache:
+  host: mysite-cache.databases.svc.cluster.local    # Dragonfly Operator endpoint
+  port: 6379
+  # password optional
+
+externalS3:
+  bucket: mysite-media-prod
+  region: eu-west-1
+  bucketUrl: https://cdn.mysite.example.com         # CloudFront / Cloudflare in front of bucket
+  existingSecret: mysite-s3-credentials             # ESO-managed; keys: access-key, secret-key
+
+# --- WP secrets via External Secrets Operator ---
+keysSalts:
+  autoGenerate: false
+  existingSecret: mysite-wp-keys                    # ESO syncs from your secret manager
+
+# --- defence-in-depth ---
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 33
+  fsGroup: 33
+
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 33
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+```
+
+Install:
+
+```bash
+helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --namespace mysite --create-namespace \
+  --values values-prod.yaml
+```
+
+## Image promotion across environments
+
+<Tip>
+  The same site image (e.g. `ghcr.io/your-org/your-site:v1.0.0`) is
+  promoted from staging → production. Only `values-prod.yaml` differs
+  — same code, different config. Use whatever GitOps tooling you
+  prefer ([Argo CD](https://argo-cd.readthedocs.io/),
+  [Flux](https://fluxcd.io/),
+  [Kargo](https://kargo.akuity.io/) for tag promotion + verification).
+
+  FrankenPress doesn't ship its own GitOps glue — the chart renders
+  k8s primitives that any orchestrator can consume.
+</Tip>
+
+## Multi-site
+
+For multiple sites in one cluster, each gets its own:
+
+- Namespace
+- Helm release (`helm install <release-name> ...`)
+- DB / cache / S3 endpoints (or shared infrastructure with per-site DBs / buckets)
+- Secret with WP keys+salts
+
+The chart is single-tenant by design. Multi-tenant features (per-site
+URL routing in one Deployment, etc.) are explicitly out of scope.

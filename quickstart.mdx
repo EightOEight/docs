@@ -1,81 +1,130 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
-icon: 'rocket'
+description: "Deploy FrankenPress on a local kind cluster in 3 steps"
+icon: "rocket"
 ---
 
-## Get started in three steps
+This guide spins up a working WordPress site on a local
+[`kind`](https://kind.sigs.k8s.io/) cluster. It uses the published
+`fp-runtime` image and the [`fp-site-template`](https://github.com/EightOEight/fp-site-template)
+template repo unchanged — no fork required for the smoke test.
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
+## Prerequisites
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="Required tools" icon="screwdriver-wrench">
+    - **Docker Desktop** or [OrbStack](https://orbstack.dev/) (macOS), or Docker Engine on Linux
+    - [`kind`](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) ≥ v0.20
+    - [`kubectl`](https://kubernetes.io/docs/tasks/tools/) ≥ v1.27
+    - [`helm`](https://helm.sh/docs/intro/install/) ≥ **v3.8** (OCI registry support is required)
+    - `composer` (only for the optional fork-and-build step)
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+  <Accordion title="Resources" icon="memory">
+    The default Helm install brings up 5 pods (site + mariadb + redis + minio + minio-console). Budget at least 2 CPU and 3 GB RAM for the cluster.
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+## 3-step quickstart
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Create a kind cluster">
+    ```bash
+    kind create cluster --name frankenpress
+    kubectl config use-context kind-frankenpress
+    ```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    Verify the node is ready:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    kubectl get nodes
+    # NAME                         STATUS   ROLES           AGE   VERSION
+    # frankenpress-control-plane   Ready    control-plane   30s   v1.35.0
+    ```
+  </Step>
 
-### Step 3: Go live
+  <Step title="Install the chart">
+    The chart is published as an OCI artifact on GHCR. Install it with all subchart defaults (in-cluster MariaDB + Redis + MinIO — fine for kind, **not for production**):
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash
+    helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+      --version 0.1.0 \
+      --namespace mysite --create-namespace \
+      --wait --timeout=10m
+    ```
 
-## Next steps
+    The `--wait` flag blocks until all pods are Ready. Expect 1–2 minutes on a cold image cache.
 
-Now that you have your docs running, explore these key features:
+    <Tip>
+      The default `image.repository` points at the demo site image
+      `ghcr.io/eightoeight/fp-site-template:0.1.0`. To deploy your own
+      site, fork [`fp-site-template`](https://github.com/EightOEight/fp-site-template),
+      push a `v*.*.*` tag (CI builds + pushes to your GHCR), then add
+      `--set image.repository=ghcr.io/<your-org>/<your-site>,image.tag=v1.0.0`.
+    </Tip>
+  </Step>
+
+  <Step title="Visit your site">
+    Port-forward the Service to your local machine:
+
+    ```bash
+    kubectl --namespace mysite port-forward svc/mysite-fp-site 8080:80
+    ```
+
+    On first install, run the WordPress installer:
+
+    ```bash
+    kubectl --namespace mysite exec deploy/mysite-fp-site -- \
+      wp --allow-root --path=/app/web/wp core install \
+        --url=http://localhost:8080 \
+        --title="My FrankenPress site" \
+        --admin_user=admin \
+        --admin_email=admin@example.com \
+        --admin_password=admin \
+        --skip-email
+    ```
+
+    Then open **http://localhost:8080/wp/wp-admin/** in your browser.
+    Log in with `admin` / `admin`.
+
+    <Check>
+      You should see the WordPress admin dashboard. Confirm the
+      "Update WordPress" / "Update Plugins" / "Update Themes" buttons
+      are **absent** — the lockdown is hard-coded.
+    </Check>
+  </Step>
+</Steps>
+
+## Tear it down
+
+```bash
+helm uninstall mysite --namespace mysite
+kubectl delete namespace mysite
+kind delete cluster --name frankenpress
+```
+
+## Common things to do next
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Fork the site template" icon="code-branch" href="https://github.com/EightOEight/fp-site-template/generate">
+    Click "Use this template" on `fp-site-template`, customise composer.json,
+    push tags, deploy your image.
+  </Card>
+  <Card title="Add a plugin" icon="puzzle-piece" href="/components/fp-site-template#adding-plugins-and-themes">
+    `composer require wpackagist-plugin/<slug>` — composer.json + lock,
+    rebuild the image, redeploy.
+  </Card>
+  <Card title="Production topology" icon="cloud" href="/operations/production">
+    Replace MariaDB / Redis / MinIO subcharts with operator-managed
+    services and AWS S3.
+  </Card>
+  <Card title="All env vars" icon="list" href="/operations/configuration">
+    Every `FP_*` and `WP_*` env var the platform reads, with defaults.
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  **Smoke-tested.** This quickstart is run end-to-end against a fresh
+  `kind` cluster as part of FrankenPress release validation. If a step
+  fails, [open an issue](https://github.com/EightOEight/fp-charts/issues)
+  with the output — we treat docs drift as a real bug.
 </Note>

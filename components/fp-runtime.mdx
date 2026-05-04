@@ -1,0 +1,113 @@
+---
+title: "fp-runtime"
+description: "Caddy + FrankenPHP + Souin base container image"
+icon: "cube"
+---
+
+[`fp-runtime`](https://github.com/EightOEight/fp-runtime) is the base
+container image every FrankenPress site extends. It ships:
+
+| Component | Version | Notes |
+|---|---|---|
+| **FrankenPHP** | `1.12.2` | Caddy + PHP 8.3 runtime, single statically-linked binary |
+| **caddyserver/cache-handler** | `v0.16.0` | Souin HTTP cache, compiled into the FrankenPHP binary via xcaddy |
+| **darkweak/storages/go-redis/caddy** | `v0.0.19` | Redis storage backend for Souin |
+| **dunglas/caddy-cbrotli** | `v1.0.1` | Brotli encoding |
+| **WP-CLI** | `2.12.0` | Cron + admin tasks |
+| **PHP extensions** | gd, intl, exif, zip, opcache, mysqli, pdo_mysql, memcached, redis | WP-friendly set |
+| **fp-mu-plugin** | configurable | Baked at build time via `FP_MU_PLUGIN_VERSION` (default: `v0.1.1`) |
+
+Published image: **`ghcr.io/eightoeight/fp-runtime:php8.3`** (pulled multi-arch eventually; currently linux/amd64).
+
+## Consumer pattern
+
+Downstream sites build on top:
+
+```dockerfile
+# In your-site/Dockerfile
+FROM composer:2 AS deps
+COPY composer.* /app/
+WORKDIR /app
+RUN composer install --no-dev --no-scripts --optimize-autoloader
+
+FROM ghcr.io/eightoeight/fp-runtime:php8.3
+COPY --from=deps /app/vendor /app/vendor
+COPY web /app/web
+COPY config /app/config
+```
+
+[`fp-site-template`](/components/fp-site-template) ships this Dockerfile
+out of the box.
+
+## Environment variables
+
+All optional. Defaults produce a working config out of the box.
+
+| Var | Default | Purpose |
+|---|---|---|
+| `REDIS_URL` | `redis:6379` | Address of the Redis used by Souin's HTTP cache |
+| `FP_CACHE_TTL` | `5m` | Default cache entry TTL |
+| `FP_CACHE_STALE` | `1h` | Stale-while-revalidate window |
+| `FP_CACHE_DEFAULT_CONTROL` | `public, s-maxage=300` | `Cache-Control` fallback when upstream doesn't set one |
+| `FP_DOCROOT` | `/app/web` | WordPress webroot inside the container |
+| `FP_PORT` | `8080` | Public HTTP listen port |
+| `FP_METRICS_PORT` | `9145` | Prometheus metrics listen port (separate from public traffic) |
+
+## Build args
+
+Override at build time with `--build-arg`:
+
+| Arg | Default |
+|---|---|
+| `PHP_VERSION` | `8.3` |
+| `FRANKENPHP_VERSION` | `1.12.2` |
+| `CACHE_HANDLER_VERSION` | `v0.16.0` |
+| `STORAGES_GO_REDIS_VERSION` | `v0.0.19` |
+| `CADDY_CBROTLI_VERSION` | `v1.0.1` |
+| `WP_CLI_VERSION` | `2.12.0` |
+| `FP_MU_PLUGIN_VERSION` | `v0.1.1` (set to `""` to skip baking) |
+
+## Page cache invalidation
+
+Souin caches GET responses in Redis. Invalidation is performed by
+[`fp-mu-plugin`](/components/fp-mu-plugin)'s `SouinInvalidator`,
+connecting **directly to Redis** and `DEL`ing cache keys. Souin's
+documented HTTP invalidation APIs (`PURGE`, POST-CRUD, `/api.souin/*`
+admin) are broken in cache-handler v0.16.0 — the workaround is empirical.
+
+Redis key shape (verified):
+
+```text
+GET-<scheme>-<host>-<path>     cached response body
+IDX_GET-<scheme>-<host>-<path> index entry pointing at the body
+SURROGATE_<tag>                set of cache keys for a given Surrogate-Key tag
+```
+
+Bulk tag-based invalidation: read `SURROGATE_<tag>` (a Redis SET), then
+pipeline-`DEL` all members. Sub-millisecond.
+
+Full investigation log: [`fp-runtime/PHASE-0.md`](https://github.com/EightOEight/fp-runtime/blob/main/PHASE-0.md).
+
+## Local development
+
+```bash
+git clone https://github.com/EightOEight/fp-runtime
+cd fp-runtime
+make build         # build fp-runtime:dev
+make up            # docker compose up -d (runtime + redis)
+make test          # run tests/cache-spike.sh
+make down          # tear down
+make ci            # all of the above in one shot
+```
+
+## CI / publishing
+
+The image is built and pushed by GitHub Actions on every push to `main`
+and on `v*.*.*` tag pushes. Tags include a short SHA for traceability:
+
+```text
+ghcr.io/eightoeight/fp-runtime:php8.3-<short-sha>
+ghcr.io/eightoeight/fp-runtime:php8.3                # rolling on main
+ghcr.io/eightoeight/fp-runtime:vX.Y.Z                # release tag
+ghcr.io/eightoeight/fp-runtime:php8.3-vX.Y.Z         # release tag, php-prefixed
+```

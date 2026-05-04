@@ -1,0 +1,137 @@
+---
+title: "fp-site-template"
+description: "GitHub template for new WordPress sites"
+icon: "file-code"
+---
+
+[`fp-site-template`](https://github.com/EightOEight/fp-site-template) is
+a [GitHub template repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template)
+for new WordPress sites running on the FrankenPress stack.
+
+## Layout
+
+Bedrock-style:
+
+```text
+.
+├── composer.json              # site dependencies (no WC, no theme picks)
+├── Dockerfile                 # multi-stage: composer build → fp-runtime
+├── docker-compose.yml         # local dev: site + mariadb + redis + minio
+├── .env.example               # all platform env vars with sane defaults
+├── config/
+│   ├── application.php        # main config + lockdown constants + env wiring
+│   └── environments/
+│       ├── development.php    # WP_DEBUG=true, indexing disabled
+│       ├── staging.php        # WP_DEBUG=true (log only), indexing disabled
+│       └── production.php     # WP_DEBUG=false, all auto-updates disabled
+└── web/                       # docroot
+    ├── index.php              # WP front controller
+    ├── wp-config.php          # thin loader → config/application.php
+    ├── wp/                    # WP core (composer-installed, gitignored)
+    └── app/                   # wp-content
+        ├── mu-plugins/
+        │   └── 00-fp-stack.php   # loader (boots roots/bedrock-autoloader)
+        ├── plugins/           # composer require wpackagist-plugin/...
+        └── themes/            # composer require wpackagist-theme/...
+```
+
+## Forking
+
+<Steps>
+  <Step title="Use this template">
+    Click **[Use this template](https://github.com/EightOEight/fp-site-template/generate)** on the repo. Pick a name (e.g. `mysite`).
+  </Step>
+  <Step title="Bootstrap locally">
+    ```bash
+    git clone git@github.com:<your-org>/<your-site>.git
+    cd <your-site>
+    make setup    # composer install + .env from .env.example
+    make up       # docker compose up -d (site + db + redis + minio)
+    ```
+  </Step>
+  <Step title="Install WordPress">
+    ```bash
+    make wp -- core install \
+      --url=http://localhost:8080 \
+      --title="My Site" \
+      --admin_user=admin \
+      --admin_email=admin@example.com \
+      --admin_password=admin
+    ```
+    Visit `http://localhost:8080/wp/wp-admin/` and log in.
+  </Step>
+</Steps>
+
+## Adding plugins and themes
+
+Composer-managed (recommended):
+
+```bash
+composer require wpackagist-plugin/seo-by-rank-math
+composer require wpackagist-theme/twentytwentyfive
+```
+
+The [wpackagist](https://wpackagist.org/) repository is wired up in
+`composer.json`. Plugins land in `web/app/plugins/`, themes in
+`web/app/themes/`.
+
+Custom code (your own theme or plugin): drop a directory under the
+right `web/app/*` subtree and commit it. The `.gitignore` ignores
+composer-installed content but unhides anything you commit explicitly.
+
+<Tip>
+  Composer-installed plugins **do not auto-activate** in WordPress.
+  Use `wp plugin activate <slug>` once after install (or once per
+  environment). The exception is `humanmade/s3-uploads` which
+  [`fp-mu-plugin`](/components/fp-mu-plugin) loads explicitly.
+</Tip>
+
+## Lockdown
+
+The four constants in `config/application.php` are **hard-coded** —
+no env-var override:
+
+```php
+Config::define( 'DISALLOW_FILE_EDIT', true );
+Config::define( 'DISALLOW_FILE_MODS', true );
+```
+
+Plus in `production.php`:
+
+```php
+Config::define( 'AUTOMATIC_UPDATER_DISABLED', true );
+Config::define( 'WP_AUTO_UPDATE_CORE', false );
+```
+
+**There is no env-var override by design.** The container image is the
+source of truth — admin-side plugin installs would land on ephemeral
+disk and disappear on pod restart, replicating inconsistently across
+replicas. Hard-failing is the correct UX.
+
+If you genuinely need to relax this for a developer-only environment,
+fork the template and remove these lines. The default does not expose
+a knob.
+
+## CI / publishing
+
+GitHub Actions:
+
+- **`lint.yml`** — PHPCS + composer audit on every push and PR
+- **`build.yml`** — on push to main and on `v*.*.*` tag, builds the site image and pushes to `ghcr.io/<your-org>/<your-site>`
+
+To cut a versioned release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The image is then available at `ghcr.io/<your-org>/<your-site>:v1.0.0`.
+Deploy with:
+
+```bash
+helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --namespace mysite \
+  --set image.repository=ghcr.io/<your-org>/<your-site> \
+  --set image.tag=v1.0.0
+```

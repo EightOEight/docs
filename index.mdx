@@ -1,133 +1,71 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
-icon: 'star'
+title: "FrankenPress"
+description: "Run WordPress at scale on Kubernetes — Caddy + FrankenPHP + Souin + S3"
+icon: "house"
 ---
 
-## Setting up
+**FrankenPress** is an opinionated, minimal way to run WordPress at scale
+on Kubernetes. Four small repos, one immutable site image, and a Helm
+chart that deploys on `kind` in under a minute.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Deploy a working WordPress site on a local `kind` cluster in 3 steps.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    What each `fp-*` repo does and how they fit together.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Production topology" icon="cloud" href="/operations/production">
+    DragonflyDB Operator, MariaDB Operator, AWS S3, External Secrets.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Components" icon="layer-group" href="/components/fp-runtime">
+    Deep dives into `fp-runtime`, `fp-mu-plugin`, `fp-site-template`, and `fp-charts`.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What's in the box
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Caddy + FrankenPHP runtime">
+    A single-process container — no nginx, no PHP-FPM, no supervisord.
+    [`fp-runtime`](https://github.com/EightOEight/fp-runtime) bakes
+    [`caddyserver/cache-handler`](https://github.com/caddyserver/cache-handler)
+    (Souin) for HTTP-level page caching with Redis-protocol storage.
+  </Step>
+  <Step title="Slim must-use plugin">
+    Two components only:
+    [`S3UploadsBootstrap`](/components/fp-mu-plugin#s3uploadsbootstrap)
+    (refuses uploads when S3 isn't fully configured — no silent local-disk
+    fallback) and
+    [`SouinInvalidator`](/components/fp-mu-plugin#souininvalidator)
+    (direct Redis `DEL` on `save_post` — bypasses cache-handler v0.16.0's
+    broken HTTP invalidation APIs).
+  </Step>
+  <Step title="GitHub-template site">
+    [`fp-site-template`](https://github.com/EightOEight/fp-site-template)
+    is a Bedrock-layout WordPress site preconfigured for the runtime.
+    Click "Use this template", run `make setup`, you have a site.
+  </Step>
+  <Step title="Bitnami-style Helm chart">
+    [`fp-charts`](https://github.com/EightOEight/fp-charts) ships
+    `fp-site` — a Helm chart that consumes any `fp-site-template`-built
+    image. Bundles MariaDB + Redis + MinIO subcharts for instant
+    `kind` deploys. Production swaps to managed services / operators.
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Design principles
 
-## Make your content agent ready
+- **Immutable images, no admin-installable plugins.** The "Update WordPress / plugins / themes" buttons are absent in admin. Lockdown is hard-coded; admin-side installs would land on ephemeral pod disk and vanish on restart anyway.
+- **Single must-use plugin scope: S3 safety + cache invalidation.** Anything else (URL fixers, object cache, metrics, WooCommerce log handlers) is a regular plugin sites install themselves.
+- **Slim default deps.** No WooCommerce, no opinionated theme picks. The site template ships only what's strictly needed for WordPress to render.
+- **No GitOps glue.** The Helm chart deploys plain Deployment + Service + HTTPRoute. End users wrap with Argo Rollouts / Kargo / Flux / etc. as they see fit.
 
-Make your docs work for humans and AI agents alike.
+## Why "FrankenPress"?
 
-<Columns cols={2}>
-  <Card
-    title="Prompt component"
-    icon="robot"
-    href="/agent-ready/prompt"
-  >
-    Embed shareable AI prompts readers can copy or open in Cursor.
-  </Card>
-  <Card
-    title="Visibility"
-    icon="eye"
-    href="/agent-ready/visibility"
-  >
-    Show different content to humans and agents reading your docs.
-  </Card>
-  <Card
-    title="Contextual menu"
-    icon="bolt"
-    href="/agent-ready/contextual"
-  >
-    Give readers one-click access to Claude, ChatGPT, Cursor, and more.
-  </Card>
-  <Card
-    title="AI coding tools"
-    icon="wand-magic-sparkles"
-    href="/ai-tools/claude-code"
-  >
-    Set up Claude Code, Cursor, or Windsurf with Mintlify's skill.
-  </Card>
-</Columns>
+[FrankenPHP](https://frankenphp.dev/) — the modern PHP app server built on Caddy — does most of the heavy lifting for the runtime. We add Souin for HTTP cache, S3-Uploads for media, and just enough WordPress glue to make Bedrock-style sites work cleanly on Kubernetes.
 
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Note>
+  FrankenPress is built and maintained by [EightOEight](https://eightoeight.io).
+  All four `fp-*` repositories are Apache-2.0 licensed.
+</Note>
