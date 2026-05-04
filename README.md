@@ -4,8 +4,8 @@
 the opinionated WordPress-on-Kubernetes stack maintained by
 [EightOEight](https://eightoeight.io).
 
-Live at <https://docs.eightoeight.io> (whatever Mintlify deploys to from
-this repo's main branch).
+Live at **<https://docs.frankenpress.com/>** — auto-deployed by Mintlify
+from this repo's main branch.
 
 ## Companion repos
 
