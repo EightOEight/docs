@@ -1,55 +1,34 @@
-# Mintlify Starter Kit
+# FrankenPress docs
 
-Use the starter kit to get your docs deployed and ready to customize
+[Mintlify](https://mintlify.com/)-powered documentation for **FrankenPress** —
+the opinionated WordPress-on-Kubernetes stack maintained by
+[EightOEight](https://eightoeight.io).
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+Live at <https://docs.eightoeight.io> (whatever Mintlify deploys to from
+this repo's main branch).
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
+## Companion repos
 
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+| Repo | Purpose |
+|---|---|
+| [`fp-runtime`](https://github.com/EightOEight/fp-runtime) | Caddy + FrankenPHP + Souin base container image |
+| [`fp-mu-plugin`](https://github.com/EightOEight/fp-mu-plugin) | Slim must-use plugin (S3 uploads bootstrap + Souin invalidator) |
+| [`fp-site-template`](https://github.com/EightOEight/fp-site-template) | GitHub template for new sites |
+| [`fp-charts`](https://github.com/EightOEight/fp-charts) | Helm chart for Kubernetes deployment |
 
-## AI-assisted writing
-
-Set up your AI coding tool to work with Mintlify:
+## Local preview
 
 ```bash
-npx skills add https://mintlify.com/docs
+npm i -g mint     # one-time
+mint dev          # serves at http://localhost:3000
 ```
 
-This command installs Mintlify's documentation skill for your configured AI tools like Claude Code, Cursor, Windsurf, and others. The skill includes component reference, writing standards, and workflow guidance.
+## Contributing
 
-See the [AI tools guides](/ai-tools) for tool-specific setup.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md). When adding new pages,
+follow the conventions in [`CLAUDE.md`](./CLAUDE.md) — they apply to
+human writers too.
 
-## Development
+## License
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
-
-```
-npm i -g mint
-```
-
-Run the following command at the root of your documentation, where your `docs.json` is located:
-
-```
-mint dev
-```
-
-View your local preview at `http://localhost:3000`.
-
-## Publishing changes
-
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
-
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+Apache-2.0 (see [`LICENSE`](./LICENSE)).

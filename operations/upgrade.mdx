@@ -1,0 +1,109 @@
+---
+title: "Upgrading"
+description: "How to roll forward FrankenPress component versions"
+icon: "arrow-up-right-from-square"
+---
+
+FrankenPress is built from four independent repos that move at their
+own cadence. Upgrades happen at three levels — **runtime**, **mu-plugin**,
+**site image** — and one operations-side level: **chart**.
+
+## Component upgrade order
+
+```text
+fp-mu-plugin    →    fp-runtime    →    your site image    →    fp-charts
+(release)            (bake new       (rebuild on top         (helm upgrade
+                      mu-plugin tag)  of new runtime)         with new tag)
+```
+
+Most upgrades skip steps. A typical example:
+
+| Change | Upgrade path |
+|---|---|
+| WP plugin / theme bump | site image only — `composer update`, tag, deploy |
+| WP core bump | site image — bump `roots/wordpress` constraint, tag, deploy |
+| FrankenPHP / Souin / Caddy module bump | fp-runtime → site image — bump `FRANKENPHP_VERSION` etc., tag fp-runtime, rebuild site image, deploy |
+| Cache invalidation logic change | fp-mu-plugin → fp-runtime → site image |
+| Helm chart change (new value, RBAC, etc.) | fp-charts only — `helm upgrade --version <new>` |
+
+## Site image upgrade
+
+The most common case. In your `fp-site-template` fork:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+CI builds and pushes `ghcr.io/<your-org>/<your-site>:v1.2.0`. Then in
+the cluster:
+
+```bash
+helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --namespace mysite \
+  --reuse-values \
+  --set image.tag=v1.2.0
+```
+
+The chart re-rolls the Deployment, draining old pods according to your
+`updateStrategy` (default rolling update with `maxSurge: 1`,
+`maxUnavailable: 0`).
+
+<Tip>
+  The chart adds `checksum/config` and `checksum/secret` annotations
+  to the pod template. If you change a `ConfigMap` or `Secret` value
+  via `helm upgrade`, the pods will roll automatically — no manual
+  pod restart needed.
+</Tip>
+
+## Chart upgrade
+
+```bash
+helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --version 0.2.0 \
+  --namespace mysite \
+  --reuse-values
+```
+
+`--reuse-values` keeps your existing overrides (image tag, S3 bucket,
+etc.). Without it you'd need to repeat every `--set` from the original
+install.
+
+## Reading the release notes
+
+Each repo publishes release notes on GitHub:
+
+- [`fp-runtime` releases](https://github.com/EightOEight/fp-runtime/releases)
+- [`fp-mu-plugin` releases](https://github.com/EightOEight/fp-mu-plugin/releases)
+- [`fp-charts` releases](https://github.com/EightOEight/fp-charts/releases)
+- (your `fp-site-template` fork's releases for site-specific changes)
+
+Breaking changes are flagged at the top of each release. Treat any
+**major** version bump (e.g. `0.x → 1.0`, `1.x → 2.0`) as requiring a
+read-through before upgrading.
+
+## Backups before major upgrades
+
+For production:
+
+1. **Database snapshot** — your DB layer (RDS / MariaDB Operator backup CR / etc.) handles this. Verify the latest snapshot is recent before triggering the upgrade.
+2. **No filesystem state to back up** — the site image is immutable, uploads live in S3. There's nothing local on the pod to lose.
+3. **Image artefact is preserved** — GHCR retains all image tags by default; a rollback is `helm upgrade --set image.tag=<previous-tag>`.
+
+## Rollback
+
+```bash
+helm rollback mysite --namespace mysite
+```
+
+This reverts to the previous release revision. To rollback further:
+
+```bash
+helm history mysite --namespace mysite
+helm rollback mysite <revision> --namespace mysite
+```
+
+Database schema changes don't auto-rollback; if a release introduced a
+WP DB migration that's incompatible with the previous code, you need a
+DB restore alongside the helm rollback. WP core upgrades and most
+plugin upgrades are forward-compatible, but verify per release.

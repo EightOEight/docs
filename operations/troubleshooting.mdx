@@ -1,0 +1,137 @@
+---
+title: "Troubleshooting"
+description: "Common failure modes and how to diagnose them"
+icon: "wrench"
+---
+
+If you hit something not covered here,
+[open an issue](https://github.com/EightOEight/fp-charts/issues) — we
+treat docs gaps as real bugs.
+
+## Pod symptoms
+
+### `ErrImageNeverPull` for the site pod
+
+You set `image.pullPolicy=Never` (typical for kind dev) but the image
+isn't loaded into the cluster.
+
+```bash
+kind load docker-image <your-image>:<tag> --name <cluster-name>
+kubectl --namespace <ns> rollout restart deploy/<release>-fp-site
+```
+
+### `ImagePullBackOff` on `bitnami/*` images
+
+Bitnami withdrew their public Docker Hub images in 2025. The chart's
+default values point at `bitnamilegacy/*` — verify yours match. If you
+override `mariadb.image.repository` etc., make sure the override still
+exists.
+
+### `CreateContainerConfigError: secret not found`
+
+The site pod references a Secret that doesn't exist yet. Common causes:
+
+1. **You set `keysSalts.existingSecret`** but the named Secret hasn't been created. Either create it (External Secrets Operator, kubectl, etc.) or set `keysSalts.autoGenerate: true`.
+2. **You disabled a subchart** (`mariadb.enabled: false`) but didn't supply `externalDatabase.existingSecret` for the password.
+3. **Subchart resource naming mismatch** — bitnami subcharts produce `<release>-<subchart>` for their resources, not `<release>-<our-chart>-<subchart>`. Our `_helpers.tpl` accounts for this; if you've overridden `nameOverride` or `fullnameOverride` it might drift.
+
+### `exec: frankenphp: Operation not permitted`
+
+You're running with `containerSecurityContext.allowPrivilegeEscalation: false` against an `fp-runtime` image **older than the `setcap -r` patch**. Older images carry `cap_net_bind_service=ep` on the binary; the kernel refuses to exec under `no_new_privs`.
+
+Fix: upgrade to a newer `fp-runtime` (the cap is stripped at build time on current images), or temporarily set `allowPrivilegeEscalation: true` in your values.
+
+## Cache symptoms
+
+### Souin returns stale content after `save_post`
+
+The `SouinInvalidator` is supposed to `DEL` the cache key on save. If
+content is stale beyond the TTL window:
+
+1. **Verify Redis connectivity** — exec into the site pod and try to ping Redis manually:
+   ```bash
+   kubectl exec deploy/<release>-fp-site -- php -r 'echo (new Redis())->connect(getenv("FP_SOUIN_REDIS_HOST"), (int)getenv("FP_SOUIN_REDIS_PORT")) ? "ok" : "fail";'
+   ```
+2. **Check the WP error log** — `error_log` lines from `[FrankenPress\\SouinInvalidator]` indicate connection or DEL failures.
+3. **Verify the cache key shape** — Souin uses `GET-<scheme>-<host>-<path>`. If the WP scheme/host returned by `home_url()` differs from what Souin sees on the request, the keys diverge. Set `WP_HOME` and `WP_SITEURL` to exactly the externally-visible URL (including scheme), and ensure the Ingress / HTTPRoute passes `X-Forwarded-Proto` correctly.
+
+### `Cache-Status: Souin; fwd=bypass; detail=UPSTREAM-ERROR-OR-EMPTY-RESPONSE`
+
+WordPress returned an empty response. Common causes:
+
+- **No theme installed** — `roots/wordpress` is no-content (no bundled themes). Make sure the site composer-installs at least one theme (`fp-site-template` ships `wpackagist-theme/twentytwentyfive` by default).
+- **PHP fatal during request** — check the site pod logs for stack traces.
+- **WP not yet installed** — visit `/wp/wp-admin/install.php` and complete the install (or run `wp core install` via `kubectl exec`).
+
+## S3 symptoms
+
+### "FrankenPress: media uploads disabled" error in WP admin
+
+`S3UploadsBootstrap` registered `wp_handle_upload_prefilter` to refuse
+uploads. The chart's ConfigMap is missing one of the required env vars
+(`FP_S3_BUCKET`, `FP_S3_KEY`, or `FP_S3_SECRET`).
+
+Check:
+
+```bash
+kubectl --namespace <ns> get configmap <release>-fp-site-env -o yaml | grep FP_S3
+```
+
+For local kind dev with the bundled MinIO subchart, these are auto-set
+from the MinIO Secret. If they're empty, the helm install probably had
+a values override that disabled MinIO without supplying `externalS3.*`.
+
+### `InvalidAccessKeyId` from S3 SDK
+
+The AWS SDK is hitting `s3.amazonaws.com` with credentials that don't
+exist there. Two common causes:
+
+1. **`FP_S3_ENDPOINT` not honoured** — fp-mu-plugin **v0.1.0** had a bug where humanmade/s3-uploads' `S3_UPLOADS_ENDPOINT` constant was defined but not applied to the SDK. Upgrade to v0.1.1 or later (the bake default in `fp-runtime`).
+2. **Real AWS credentials misconfigured** — verify `FP_S3_KEY` and `FP_S3_SECRET` are correct, and the IAM principal has `s3:GetObject` / `s3:PutObject` / `s3:DeleteObject` / `s3:ListBucket` on the bucket.
+
+## Helm symptoms
+
+### `INSTALLATION FAILED: ... namespace ... is being terminated`
+
+You uninstalled but the namespace is still deleting. Wait, then retry:
+
+```bash
+until ! kubectl get namespace <ns> >/dev/null 2>&1; do sleep 2; done
+helm install ...
+```
+
+### `Error: looks like "..." is not a valid chart repository`
+
+You're using OCI registry syntax (`oci://...`) on a Helm version older
+than 3.8. Upgrade Helm: `brew upgrade helm` (or your platform
+equivalent).
+
+### `helm dependency update`: image pull failure
+
+Bitnami's OCI registry occasionally rate-limits anonymous pulls. Run
+`helm dependency update` again, or authenticate to the registry first
+with `helm registry login registry-1.docker.io`.
+
+## WordPress symptoms
+
+### Bedrock-autoloader DB errors during `wp core install`
+
+You'll see error lines like:
+
+```text
+WordPress database error Table 'wordpress.wp_options' doesn't exist
+  for query INSERT INTO `wp_options` ... bedrock_autoloader ...
+```
+
+These appear during the **first** `wp core install` because
+`roots/bedrock-autoloader` tries to write its discovery cache to
+`wp_options` before WP creates the table. The install completes
+successfully despite the noise; subsequent boots are clean. Not
+blocking; ignore.
+
+### "Update WordPress" button is grayed-out / missing
+
+This is by design. The lockdown constants (`DISALLOW_FILE_MODS`,
+`AUTOMATIC_UPDATER_DISABLED`) are hard-coded in `config/application.php`
+and `config/environments/production.php`. Updates go through image
+rebuilds — see [Upgrading](/operations/upgrade).

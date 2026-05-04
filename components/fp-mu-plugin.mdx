@@ -1,0 +1,124 @@
+---
+title: "fp-mu-plugin"
+description: "Slim WordPress must-use plugin: S3 uploads bootstrap + Souin cache invalidator"
+icon: "puzzle-piece"
+---
+
+[`fp-mu-plugin`](https://github.com/EightOEight/fp-mu-plugin) is the
+WordPress-side glue for the FrankenPress stack. Two components only —
+anything else (URL fixers, object cache, metrics, WC log handlers) is
+considered **optional** and is the consumer site's responsibility.
+
+| Component | What it does |
+|---|---|
+| [**S3UploadsBootstrap**](#s3uploadsbootstrap) | Configures [`humanmade/s3-uploads`](https://github.com/humanmade/S3-Uploads) from `FP_S3_*` env vars. **Refuses uploads** when S3 isn't fully configured (no silent local-disk fallback). |
+| [**SouinInvalidator**](#souininvalidator) | `DEL`s Souin's Redis cache entries directly on `save_post`, `clean_post_cache`, `switch_theme`, etc. — bypasses cache-handler's broken HTTP invalidation. |
+
+Composer name: `eightoeight/fp-mu-plugin`. Latest release: `v0.1.1`.
+
+## S3UploadsBootstrap
+
+Maps `FP_S3_*` env vars to humanmade/s3-uploads' `S3_UPLOADS_*` constants
+and auto-loads the s3-uploads plugin from composer's vendor / plugins
+dir. **Refuses media uploads** via `wp_handle_upload_prefilter` when
+required env vars are missing.
+
+### Why refuse rather than fall back?
+
+In a containerized deploy, local disk is **ephemeral** (gone on pod
+restart) and **inconsistent across replicas** (write to pod A, read from
+pod B → 404). Silently writing uploads to local disk would produce
+broken behaviour that surfaces minutes-to-hours later. A hard upload
+failure surfaces the misconfiguration immediately.
+
+### Env vars
+
+| Var | Default | Required |
+|---|---|---|
+| `FP_S3_BUCKET` | — | ✓ |
+| `FP_S3_KEY` | — | ✓ |
+| `FP_S3_SECRET` | — | ✓ |
+| `FP_S3_REGION` | `us-east-1` | |
+| `FP_S3_BUCKET_URL` | — | optional CDN URL — auto-sets `WP_CONTENT_URL` if undefined |
+| `FP_S3_ENDPOINT` | — | optional, for non-AWS S3-compatible (MinIO, R2, GCS XML) |
+| `FP_S3_DISABLED` | `false` | truthy → skip the bootstrap entirely (**local dev only — never in production**) |
+
+### Endpoint filter (v0.1.1)
+
+humanmade/s3-uploads documents `S3_UPLOADS_ENDPOINT` but doesn't apply
+it to the AWS SDK by itself — you have to register a filter. v0.1.1 of
+this plugin registers `s3_uploads_s3_client_params` automatically when
+the endpoint constant is defined, with `use_path_style_endpoint: true`
+(MinIO and most S3-compatibles don't support virtual-host bucket
+addressing).
+
+## SouinInvalidator
+
+Connects directly to Redis and `DEL`s Souin's cache entries on
+WordPress lifecycle events.
+
+### Hooks
+
+- `save_post`, `deleted_post`, `clean_post_cache` — invalidate the post URL + tag + home page
+- `comment_post`, `transition_comment_status` — invalidate the parent post
+- `switch_theme`, `permalink_structure_changed` — invalidate everything
+- `updated_option` (for `blogname`, `permalink_structure`, etc.) — invalidate everything
+
+### Env vars
+
+| Var | Default | Purpose |
+|---|---|---|
+| `FP_SOUIN_REDIS_HOST` | `redis` | Redis hostname |
+| `FP_SOUIN_REDIS_PORT` | `6379` | Redis port |
+| `FP_SOUIN_REDIS_PASSWORD` | (empty) | Redis AUTH password |
+| `FP_SOUIN_REDIS_DB` | `0` | Logical database |
+| `FP_SOUIN_REDIS_TIMEOUT` | `1.0` | Connect timeout (seconds) |
+| `FP_SOUIN_DISABLED` | `false` | Truthy → no-op the invalidator (cache then expires only by TTL) |
+
+### Why direct Redis DEL?
+
+Souin's documented HTTP invalidation APIs (`PURGE`, POST-CRUD, the
+`/api.souin/*` admin endpoint) are broken in cache-handler v0.16.0:
+
+- `PURGE` returns 200 but **caches the PURGE response itself** instead of invalidating the GET.
+- `POST` likewise — caches the POST response.
+- The admin endpoint at `/api.souin/...` returns 404 even when the API basepath is configured.
+
+Direct Redis manipulation is sub-millisecond, has no parser to break,
+and works against any Redis-compatible service (including DragonflyDB).
+Full investigation log:
+[`fp-runtime/PHASE-0.md`](https://github.com/EightOEight/fp-runtime/blob/main/PHASE-0.md).
+
+### Failure mode
+
+If `ext-redis` isn't loaded, or the connection fails, or
+`FP_SOUIN_DISABLED` is set, the invalidator is a **silent no-op**.
+Errors are logged via `error_log` but never raised — a broken cache
+layer must not break WordPress itself.
+
+## Install
+
+```bash
+composer require eightoeight/fp-mu-plugin
+```
+
+[`fp-site-template`](/components/fp-site-template) ships this dep
+preconfigured. The plugin lands at
+`web/app/mu-plugins/fp-mu-plugin/` and is auto-loaded by
+[`roots/bedrock-autoloader`](https://github.com/roots/bedrock-autoloader)
+via the `00-fp-stack.php` loader.
+
+## Local testing
+
+The package ships PHPUnit unit tests using
+[Brain Monkey](https://github.com/Brain-WP/BrainMonkey) (WP function
+stubs) and Mockery (Redis client mocks). No real Redis or WP install
+needed:
+
+```bash
+composer install
+composer test     # phpunit
+composer lint     # phpcs (WordPress-Core ruleset)
+composer stan     # phpstan level 6
+composer ci       # all four checks (lint + stan + test + audit)
+```

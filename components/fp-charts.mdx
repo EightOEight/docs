@@ -1,0 +1,150 @@
+---
+title: "fp-charts"
+description: "Helm chart for deploying FrankenPress sites to Kubernetes"
+icon: "ship"
+---
+
+[`fp-charts`](https://github.com/EightOEight/fp-charts) ships **`fp-site`** —
+a Helm chart that deploys a single FrankenPress WordPress site to
+Kubernetes. Bitnami chart style throughout: every value annotated with
+`## @param`, naming + labels via the `bitnami/common` library, optional
+subchart deps via the Bitnami OCI registry.
+
+## Install
+
+The chart is published as an OCI artifact on GHCR:
+
+```bash
+helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --version 0.1.0 \
+  --namespace mysite --create-namespace
+```
+
+For the kind-cluster quickstart, see [Quickstart](/quickstart).
+
+For the production topology (DragonflyDB Operator, MariaDB Operator,
+AWS S3, External Secrets), see [Operations → Production
+topology](/operations/production).
+
+## What gets deployed
+
+```text
+                     ┌───────────────────┐
+                     │  fp-site Deployment│   replicas: 1 (configurable; HPA optional)
+                     │  (Caddy + FPHP)   │   ports: 8080 http, 9145 metrics
+                     └──────┬─────┬──────┘
+              ┌─────────────┘     └────────────┐
+              ▼                                 ▼
+     ┌─────────────────┐              ┌──────────────────┐
+     │ fp-site Service │              │ keys-salts Secret│
+     │ ClusterIP       │              │ (auto-generated  │
+     │                 │              │  on first install)│
+     └────────┬────────┘              └──────────────────┘
+              │ (optional)
+              │
+     ┌────────┴────────┐
+     │ Ingress / HTTP- │
+     │ Route (gated)   │
+     └─────────────────┘
+
+       Plus, when subcharts are enabled (defaults for kind):
+       • mysite-mariadb-0          (bitnami/mariadb)
+       • mysite-redis-master-0     (bitnami/redis)
+       • mysite-minio-*            (bitnami/minio)
+       • mysite-minio-console-*    (bitnami/minio)
+
+       Plus a CronJob for wp-cron (every 5 min by default).
+```
+
+## Subchart dependencies
+
+| Subchart | Default | Purpose |
+|---|---|---|
+| `bitnami/common` | always loaded | Library helpers (fullname, labels, image templating) |
+| `bitnami/mariadb` | enabled | In-cluster DB for instant deploy. **Not for production.** |
+| `bitnami/redis` | enabled | Souin HTTP cache backend. **Production: swap to DragonflyDB Operator.** |
+| `bitnami/minio` | enabled | S3-compatible object storage. **Production: swap to AWS S3 / R2 / GCS.** |
+
+<Warning>
+  Bitnami withdrew their `bitnami/<name>` images from free public
+  Docker Hub in 2025 ("Bitnami Secure Images" commercial pivot). The
+  chart's default values point at the `bitnamilegacy/<name>` mirror
+  Bitnami publishes for community use. We track this as a Renovate
+  concern; see the values.yaml comments.
+</Warning>
+
+## Values reference
+
+The full annotated values reference is in
+[`charts/fp-site/values.yaml`](https://github.com/EightOEight/fp-charts/blob/main/charts/fp-site/values.yaml).
+Key sections:
+
+- **`image.*`** — your site image (`ghcr.io/<your-org>/<your-site>:<tag>`)
+- **`site.*`** — `url`, `env`, `wpPath`
+- **`keysSalts.*`** — auto-generate or use `existingSecret`
+- **`replicaCount`**, **`resources`**, **`autoscaling.*`** — scaling
+- **`ingress.*`** / **`httpRoute.*`** — routing (off by default; pick one)
+- **`mariadb.*`** / **`redis.*`** / **`minio.*`** — subchart toggles + image overrides
+- **`externalDatabase.*`** / **`externalCache.*`** / **`externalS3.*`** — used when subcharts are off
+
+A condensed reference is at [Operations → Configuration](/operations/configuration).
+
+## Production overrides example
+
+```yaml
+# values-prod.yaml
+image:
+  repository: ghcr.io/your-org/your-site
+  tag: v1.0.0
+
+site:
+  url: https://mysite.example.com
+  env: production
+
+replicaCount: 3
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+
+ingress:
+  enabled: true
+  className: nginx
+  hostname: mysite.example.com
+  tls: true
+
+# Disable in-cluster subcharts.
+mariadb:
+  enabled: false
+redis:
+  enabled: false
+minio:
+  enabled: false
+
+# Point at production services.
+externalDatabase:
+  host: mysite-mariadb-primary.databases.svc.cluster.local
+  database: mysite
+  user: mysite
+  existingSecret: mysite-db-credentials
+
+externalCache:
+  host: mysite-dragonfly.cache.svc.cluster.local
+  port: 6379
+
+externalS3:
+  bucket: mysite-media-prod
+  region: eu-west-1
+  bucketUrl: https://cdn.mysite.example.com
+  existingSecret: mysite-s3-credentials   # keys: access-key, secret-key
+
+# External Secrets Operator (recommended) for keys+salts.
+keysSalts:
+  autoGenerate: false
+  existingSecret: mysite-wp-keys
+```
+
+## CI / publishing
+
+- **`lint.yml`** — `helm lint` + `helm template` + `chart-testing ct lint` on every push and PR.
+- **`release.yml`** — on push to main, `helm package` + push to `oci://ghcr.io/eightoeight/charts/fp-site`. Plus `chart-releaser-action` as a github-release fallback.
