@@ -1,0 +1,119 @@
+---
+title: "Runtime matrix"
+description: "Supported PHP × WordPress combinations and how to pick one"
+icon: "table-cells"
+---
+
+`fp-runtime` ships a multi-arch image for each supported PHP minor.
+`fp-site-template` runs a nightly compat-matrix that confirms each
+PHP × WP combination still composes cleanly. This page is the source
+of truth for which combinations are blessed.
+
+## Supported combinations
+
+|  | PHP 8.3 | PHP 8.4 | PHP 8.5 |
+|---|---|---|---|
+| **WordPress 6.9** | supported | supported | supported |
+| **WordPress 6.8** | supported | supported | supported |
+
+PHP < 8.3 is EOL or near-EOL upstream — out of scope. WordPress < 6.8
+is below the floor we commit to support.
+
+The compat-matrix workflow runs on every PR to `fp-site-template` plus
+nightly at 06:00 UTC, so any regression introduced by an upstream WP
+point release within `~6.8.0` / `~6.9.0` is caught within 24 hours.
+
+## Tag schema
+
+`fp-runtime` publishes a multi-arch manifest list (`linux/amd64` +
+`linux/arm64`) under each of these tags:
+
+| Tag | Cadence | Example |
+|---|---|---|
+| `:php<X.Y>` | rolling, on push to `main` | `:php8.3`, `:php8.4`, `:php8.5` |
+| `:php<X.Y>-<short-sha>` | every non-PR push | `:php8.4-abc1234` |
+| `:php<X.Y>-v<W.Z>` | on `v*.*.*` tag push | `:php8.4-v0.2.0` |
+| `:v<W.Z>` | on `v*.*.*` tag, **default PHP only** | `:v0.2.0` |
+
+The unprefixed `:v<W.Z>` channel exists so consumers who don't care
+which PHP they're on can pin a release without encoding the default.
+The default PHP is **`8.3`** — see [Default-PHP cadence](#default-php-cadence).
+
+## Picking a PHP
+
+`fp-site-template`'s `Dockerfile` defaults the runtime base to the
+default PHP:
+
+```dockerfile
+ARG FP_RUNTIME_IMAGE=ghcr.io/eightoeight/fp-runtime
+ARG FP_RUNTIME_VERSION=php8.3
+```
+
+To opt into a different PHP, either pin it in your fork's `Dockerfile`:
+
+```dockerfile
+ARG FP_RUNTIME_VERSION=php8.4
+```
+
+…or override per-build:
+
+```bash
+docker build --build-arg FP_RUNTIME_VERSION=php8.4 -t my-site:test .
+```
+
+Your site's CI (`build.yml`) honours the Dockerfile default; per-build
+overrides only affect the invocation that sets them.
+
+<Tip>
+  To exercise your actual site code under a non-default PHP before
+  flipping it, run `FP_RUNTIME_VERSION=php8.4 make build` locally.
+  The compose harness picks up the override.
+</Tip>
+
+## Picking a WordPress minor
+
+WordPress core is composer-installed at site-build time, gated by the
+`roots/wordpress` constraint in your fork's `composer.json`:
+
+```json
+{
+  "require": {
+    "roots/wordpress": "^6.8"
+  }
+}
+```
+
+`^6.8` admits both 6.8.x and 6.9.x; `composer install` resolves to the
+highest matching point release at build time. To lock onto a specific
+minor:
+
+```bash
+composer require "roots/wordpress:~6.9.0"
+```
+
+`~6.9.0` admits patch releases (6.9.1, 6.9.2, …) but not 6.10. Useful
+when an upstream minor introduces a regression for your stack and you
+want a stable hold-line until it's fixed.
+
+## Default-PHP cadence
+
+The unprefixed `:v<W.Z>` channel always points at the **default PHP**,
+currently `8.3`. The default is bumped deliberately — typically ~6
+months after a new PHP minor reaches upstream-stable status, long
+enough for early ecosystem incompatibilities to surface and be patched.
+
+A default-PHP bump is a coordinated PR across `fp-runtime` (the
+`DEFAULT_PHP` env in `build.yml`) and this page. `fp-site-template`
+forks do **not** auto-bump; each site pins its own PHP via the
+`FP_RUNTIME_VERSION` build arg.
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="fp-runtime" icon="cube" href="/components/fp-runtime">
+    Build args, env vars, and the cache-invalidation contract.
+  </Card>
+  <Card title="Upgrade flow" icon="arrows-rotate" href="/operations/upgrade">
+    `git tag` → CI → `helm upgrade` per environment.
+  </Card>
+</CardGroup>

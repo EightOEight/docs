@@ -36,6 +36,7 @@
             "pages": [
               "operations/production",
               "operations/configuration",
+              "operations/runtime-matrix",
               "operations/upgrade",
               "operations/troubleshooting"
             ]
