@@ -9,7 +9,7 @@ container image every FrankenPress site extends. It ships:
 
 | Component | Version | Notes |
 |---|---|---|
-| **FrankenPHP** | `1.12.2` | Caddy + PHP 8.3 runtime, single statically-linked binary |
+| **FrankenPHP** | `1.12.2` | Caddy + PHP runtime, single statically-linked binary. Built per supported PHP minor — see [Runtime matrix](/operations/runtime-matrix) |
 | **caddyserver/cache-handler** | `v0.16.0` | Souin HTTP cache, compiled into the FrankenPHP binary via xcaddy |
 | **darkweak/storages/go-redis/caddy** | `v0.0.19` | Redis storage backend for Souin |
 | **dunglas/caddy-cbrotli** | `v1.0.1` | Brotli encoding |
@@ -17,7 +17,10 @@ container image every FrankenPress site extends. It ships:
 | **PHP extensions** | gd, intl, exif, zip, opcache, mysqli, pdo_mysql, memcached, redis | WP-friendly set |
 | **fp-mu-plugin** | configurable | Baked at build time via `FP_MU_PLUGIN_VERSION` (default: `v0.1.1`) |
 
-Published image: **`ghcr.io/eightoeight/fp-runtime:php8.3`** — multi-arch manifest with `linux/amd64` + `linux/arm64`.
+Published images: a multi-arch manifest list (`linux/amd64` +
+`linux/arm64`) per supported PHP minor — `:php8.3`, `:php8.4`,
+`:php8.5`. The default channel is **`ghcr.io/eightoeight/fp-runtime:php8.3`**.
+See [Runtime matrix](/operations/runtime-matrix) for the full tag schema.
 
 ## Consumer pattern
 
@@ -102,12 +105,8 @@ make ci            # all of the above in one shot
 
 ## CI / publishing
 
-The image is built and pushed by GitHub Actions on every push to `main`
-and on `v*.*.*` tag pushes. Tags include a short SHA for traceability:
-
-```text
-ghcr.io/eightoeight/fp-runtime:php8.3-<short-sha>
-ghcr.io/eightoeight/fp-runtime:php8.3                # rolling on main
-ghcr.io/eightoeight/fp-runtime:vX.Y.Z                # release tag
-ghcr.io/eightoeight/fp-runtime:php8.3-vX.Y.Z         # release tag, php-prefixed
-```
+Built and pushed by GitHub Actions on every push to `main` and on
+`v*.*.*` tag pushes. CI exercises the full `(php, arch)` matrix and
+emits per-PHP rolling, per-PHP per-sha, per-PHP per-release, and an
+unprefixed per-release tag (default PHP only). The full schema lives
+in [Runtime matrix](/operations/runtime-matrix#tag-schema).
