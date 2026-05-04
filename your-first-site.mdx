@@ -1,0 +1,212 @@
+---
+title: "Your first site"
+description: "Fork the template, customise, publish, deploy"
+icon: "code-branch"
+---
+
+The [Quickstart](/quickstart) deploys the upstream demo image. This guide
+walks the **builder** path: fork [`fp-site-template`](https://github.com/EightOEight/fp-site-template),
+let it self-customise, push your own image, and deploy that.
+
+A reference fork lives at
+[`MatthewKennedy/frankenpress-demo`](https://github.com/MatthewKennedy/frankenpress-demo) —
+a working example of the result of every step below.
+
+## Prerequisites
+
+<AccordionGroup>
+  <Accordion title="Required tools" icon="screwdriver-wrench">
+    - **GitHub** account with permission to create public repos and packages
+    - **Docker Desktop** or [OrbStack](https://orbstack.dev/) (macOS), or Docker Engine on Linux
+    - **`git`**, **`make`**, **`composer`**
+    - **`gh`** ([GitHub CLI](https://cli.github.com/)) — optional, but the docs use it for terseness
+    - **`kind`** + **`kubectl`** + **`helm`** ≥ v3.8 — only needed for the cluster step
+  </Accordion>
+  <Accordion title="What gets created on your account" icon="github">
+    - A new repo at `github.com/<your-account>/<your-site>` (public by default — flip to private if you prefer; cluster pulls then need an image pull secret)
+    - A GHCR package at `ghcr.io/<your-account>/<your-site>` — built and tagged automatically by CI
+  </Accordion>
+</AccordionGroup>
+
+<Steps>
+  <Step title="Use the template">
+    Click **[Use this template](https://github.com/EightOEight/fp-site-template/generate)**
+    on `fp-site-template`. Pick an owner (your account or org) and a
+    name — for the rest of this guide we'll use `<owner>/<site>`.
+
+    Within ~30 seconds GitHub Actions runs the **template-cleanup**
+    workflow on your new repo. It does three things:
+
+    1. Substitutes the upstream-hardcoded fields:
+       - `composer.json`: `name`, `description`, `homepage`, `support.issues`, `support.source`
+       - `Dockerfile`: `org.opencontainers.image.source` label
+    2. Removes the cleanup workflow itself (one-shot).
+    3. Triggers `build.yml` to publish the first image.
+
+    You'll see two commits on `main`: the original template snapshot
+    and `chore: initialize from fp-site-template`. Watch progress with:
+
+    ```bash
+    gh run watch --repo <owner>/<site>
+    ```
+
+    <Check>
+      After ~2 minutes, `ghcr.io/<owner>/<site>:latest` is pullable
+      and the workflows tab shows green `template-cleanup` + `build` runs.
+    </Check>
+  </Step>
+
+  <Step title="Clone and run locally">
+    ```bash
+    git clone git@github.com:<owner>/<site>.git
+    cd <site>
+    make setup     # composer install + .env from .env.example
+    make up        # docker compose up -d (site + mariadb + redis + minio)
+    ```
+
+    Install WordPress (one-time, on first boot):
+
+    ```bash
+    make wp -- core install \
+      --url=http://localhost:8080 \
+      --title="My site" \
+      --admin_user=admin \
+      --admin_email=admin@example.com \
+      --admin_password=admin \
+      --skip-email
+    ```
+
+    Open <http://localhost:8080/wp/wp-admin/> and log in.
+
+    <Check>
+      The "Update WordPress" / "Update Plugins" / "Update Themes"
+      buttons should be **absent**. The lockdown is hard-coded in
+      `config/application.php` — see [fp-site-template → Lockdown](/components/fp-site-template#lockdown).
+    </Check>
+
+    Upload a media item under **Media → Add New**. It lands in MinIO
+    at <http://localhost:9001> (credentials `minioadmin` / `minioadmin`).
+
+    <Tip>
+      `make logs` tails the site container. `make shell` drops you into
+      it. `make down` tears the stack down (volumes preserved); `make
+      clean` wipes volumes too.
+    </Tip>
+  </Step>
+
+  <Step title="Add plugins and themes">
+    Composer-managed (recommended):
+
+    ```bash
+    composer require wpackagist-plugin/seo-by-rank-math
+    composer require wpackagist-theme/twentytwentyfive
+    git add composer.json composer.lock
+    git commit -m "chore: add rank-math + twentytwentyfive"
+    git push
+    ```
+
+    Plugins land in `web/app/plugins/`, themes in `web/app/themes/`.
+    Custom code: drop a directory under the right `web/app/*` subtree
+    and commit it directly.
+
+    <Note>
+      Composer-installed plugins **do not auto-activate**. Run
+      `wp plugin activate <slug>` once after the next deploy (or
+      `make wp -- plugin activate <slug>` locally). The one exception
+      is `humanmade/s3-uploads`, which [`fp-mu-plugin`](/components/fp-mu-plugin)
+      loads explicitly.
+    </Note>
+  </Step>
+
+  <Step title="Cut a release">
+    The template's `build.yml` publishes images on every push to `main`
+    (`:latest` + `:<short-sha>`) and on every `v*.*.*` tag (`:vX.Y.Z`
+    additionally). Tag your first release:
+
+    ```bash
+    git tag v0.1.0
+    git push origin v0.1.0
+    ```
+
+    Watch the build:
+
+    ```bash
+    gh run watch
+    ```
+
+    <Check>
+      Three image tags now exist on `ghcr.io/<owner>/<site>`:
+      - `:latest` (moves on every main push)
+      - `:<short-sha>` (immutable per commit)
+      - `:v0.1.0` (immutable per tag — use this in production)
+    </Check>
+  </Step>
+
+  <Step title="Deploy to a cluster">
+    Same `fp-site` chart as the [Quickstart](/quickstart), pointed at
+    your image:
+
+    ```bash
+    kind create cluster --name myfp
+    kubectl config use-context kind-myfp
+
+    helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+      --version 0.1.0 \
+      --namespace mysite --create-namespace \
+      --set image.repository=ghcr.io/<owner>/<site> \
+      --set image.tag=v0.1.0 \
+      --wait --timeout=10m
+    ```
+
+    Port-forward and run the WP installer:
+
+    ```bash
+    kubectl --namespace mysite port-forward svc/mysite-fp-site 8080:80 &
+
+    kubectl --namespace mysite exec deploy/mysite-fp-site -- \
+      wp --allow-root --path=/app/web/wp core install \
+        --url=http://localhost:8080 \
+        --title="My site" \
+        --admin_user=admin \
+        --admin_email=admin@example.com \
+        --admin_password=admin \
+        --skip-email
+    ```
+
+    Open <http://localhost:8080/wp/wp-admin/>.
+
+    <Tip>
+      The default install brings up bundled MariaDB + Redis + MinIO
+      subcharts — fine for kind, **not for production**. Swap them out
+      per [Production topology](/operations/production).
+    </Tip>
+  </Step>
+</Steps>
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Production topology" icon="cloud" href="/operations/production">
+    Replace bundled subcharts with operator-managed databases + AWS S3.
+  </Card>
+  <Card title="All env vars" icon="list" href="/operations/configuration">
+    Every `FP_*` and `WP_*` variable the platform reads, with defaults.
+  </Card>
+  <Card title="Upgrade flow" icon="arrows-rotate" href="/operations/upgrade">
+    `git tag` → CI → `helm upgrade --set image.tag=...` per environment.
+  </Card>
+  <Card title="Troubleshooting" icon="bug" href="/operations/troubleshooting">
+    "Update WordPress" buttons missing? Pod stuck in CrashLoop? Read this first.
+  </Card>
+</CardGroup>
+
+## Reference fork
+
+[`MatthewKennedy/frankenpress-demo`](https://github.com/MatthewKennedy/frankenpress-demo)
+is a public fork of `fp-site-template` kept as a worked example. Its
+commit history shows exactly the substitutions the cleanup workflow
+applies, and its `ghcr.io/matthewkennedy/frankenpress-demo:v0.1.0`
+package is the artefact a production install would deploy.
+
+If your run diverges from what's documented here, compare against that
+repo to triangulate the difference.
