@@ -135,3 +135,28 @@ This is by design. The lockdown constants (`DISALLOW_FILE_MODS`,
 `AUTOMATIC_UPDATER_DISABLED`) are hard-coded in `config/application.php`
 and `config/environments/production.php`. Updates go through image
 rebuilds — see [Upgrading](/operations/upgrade).
+
+### Browser shows "unknown app" / 301 redirect loop on `localhost:8080`
+
+You're port-forwarding to the site Service but the browser ends up at
+`http://fp-site.localhost/` (or `http://localhost/`) and OrbStack /
+your DNS resolver shows "unknown app" or a connection-refused page.
+
+The chart defaults `WP_HOME` to `http://fp-site.localhost`, and
+WordPress 301-redirects any request whose `Host` header doesn't match.
+When you `kubectl port-forward` to `localhost:8080`, the browser sends
+`Host: localhost:8080`, which WP rejects.
+
+Fix it by setting `site.url` to the URL you'll actually browse to:
+
+```bash
+helm upgrade <release> oci://ghcr.io/eightoeight/charts/fp-site \
+  --namespace <ns> --reuse-values \
+  --set site.url=http://localhost:8080
+```
+
+Wait for the rollout, then `port-forward svc/<release>-fp-site 8080:80`
+and browse to `http://localhost:8080/`.
+
+For a real deploy, set `site.url` to your public URL and enable
+`ingress.*` or `httpRoute.*` instead of port-forwarding.
