@@ -6,26 +6,17 @@ icon: "diagram-project"
 
 FrankenPress is four repos that compose into one WordPress deployment:
 
-```text
-                             ┌────────────────┐
-                             │  fp-charts     │  Helm chart that deploys
-                             │  (helm chart)  │  the site image to k8s
-                             └───────┬────────┘
-                                     │ deploys
-                                     ▼
-┌──────────────┐    extends   ┌──────────────┐
-│  fp-runtime  │◄─────────────│  fp-site-    │  Bedrock-layout WP site
-│  (base       │              │  template    │  (builds an immutable image)
-│   container) │              │  (template)  │
-└──────┬───────┘              └──────┬───────┘
-       │ bakes at build time        │ composer-installs
-       ▼                            ▼
-┌────────────────────────────────────────────┐
-│  fp-mu-plugin                              │
-│  (composer package)                        │
-│  • S3UploadsBootstrap                      │
-│  • SouinInvalidator                        │
-└────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    charts["<b>fp-charts</b><br/>Helm chart"]
+    template["<b>fp-site-template</b><br/>Bedrock-layout WP site<br/>(builds immutable image)"]
+    runtime["<b>fp-runtime</b><br/>Caddy + FrankenPHP + Souin<br/>base container"]
+    mu["<b>fp-mu-plugin</b><br/>S3UploadsBootstrap + SouinInvalidator"]
+
+    charts -->|deploys| template
+    template -->|FROM| runtime
+    runtime -->|bakes at build time| mu
+    template -->|composer-installs| mu
 ```
 
 ## The four repos
@@ -51,24 +42,22 @@ FrankenPress is four repos that compose into one WordPress deployment:
 
 ## Request flow
 
-```text
-        ┌──────────┐      ┌──────────────────────────┐
-client→ │  Caddy   │ ───→ │  Souin (HTTP cache)      │ HIT? respond
-        └──────────┘      └────────────┬─────────────┘
-                                       │ MISS
-                                       ▼
-                          ┌──────────────────────────┐
-                          │  FrankenPHP worker       │
-                          │  (loads WP via Caddy     │
-                          │   in-process, no FPM)    │
-                          └────────────┬─────────────┘
-                                       │
-                          ┌────────────┴─────────────┐
-                          │  fp-mu-plugin            │
-                          │  ─────────────────────── │
-                          │  S3UploadsBootstrap → S3 │
-                          │  SouinInvalidator → Redis│
-                          └──────────────────────────┘
+```mermaid
+flowchart LR
+    client(["client"])
+    caddy["Caddy"]
+    souin{{"Souin<br/>HTTP cache"}}
+    fphp["FrankenPHP worker<br/>(loads WP in-process,<br/>no PHP-FPM)"]
+    mu["fp-mu-plugin"]
+    s3[(S3)]
+    redis[(Redis)]
+
+    client --> caddy --> souin
+    souin -->|HIT| client
+    souin -->|MISS| fphp
+    fphp --> mu
+    mu -->|S3UploadsBootstrap| s3
+    mu -->|SouinInvalidator on save_post| redis
 ```
 
 Souin caches GET responses in Redis. On `save_post`,
@@ -80,17 +69,14 @@ for the investigation).
 
 ## Image promotion
 
-```text
-git tag v1.0.0 (in your fp-site-template fork)
-        │
-        ▼
-GHA build.yml: composer install → docker build → push to GHCR
-        │
-        ▼
-ghcr.io/<your-org>/<your-site>:v1.0.0
-        │
-        ▼
-helm upgrade ... --set image.tag=v1.0.0
+```mermaid
+flowchart LR
+    tag["git tag v1.0.0<br/>(in fp-site-template fork)"]
+    ci["GHA build.yml<br/>composer install →<br/>docker build →<br/>push to GHCR"]
+    ghcr[("ghcr.io/owner/site:v1.0.0")]
+    helm["helm upgrade<br/>--set image.tag=v1.0.0"]
+
+    tag --> ci --> ghcr --> helm
 ```
 
 Each tag produces an **immutable** site image (WP core + plugins + your
