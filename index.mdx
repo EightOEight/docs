@@ -52,6 +52,14 @@ chart that deploys on `kind` in under a minute.
     image. Bundles MariaDB + Redis + MinIO subcharts for instant
     `kind` deploys. Production swaps to managed services / operators.
   </Step>
+  <Step title="Auto-install on first deploy">
+    A post-install Helm hook Job runs `wp core install` and
+    `wp core update-db` so a fresh `helm install` produces a usable
+    site — no manual `kubectl exec`. Idempotent across upgrades; opt-in
+    `syncAdminCredentials` reconciles the admin password from a
+    Secret on every release for ESO/Sealed-Secret rotation flows.
+    See [fp-charts → First install](/components/fp-charts#first-install).
+  </Step>
 </Steps>
 
 ## Design principles

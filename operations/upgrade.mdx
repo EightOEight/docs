@@ -56,11 +56,44 @@ The chart re-rolls the Deployment, draining old pods according to your
   pod restart needed.
 </Tip>
 
+## What the post-upgrade install Job does
+
+Every `helm upgrade` (and the initial `helm install`) fires a
+post-upgrade hook Job named `<release>-fp-site-install`. The Job
+runs three things, all idempotent:
+
+1. `wp core is-installed` — short-circuits the install branch on every
+   upgrade after the first.
+2. `wp core update-db` — applies any pending schema migrations from
+   the WP core version baked into the new image. No-op if already
+   current.
+3. `wp user update <admin>` — only if `siteInstall.syncAdminCredentials: true`.
+   Reads the admin Secret and reconciles `wp_users` so an
+   externally-rotated password takes effect on the next release.
+
+Watch a single upgrade's Job complete:
+
+```bash
+kubectl --namespace <ns> get jobs --watch
+```
+
+The Job uses `helm.sh/hook-delete-policy: hook-succeeded`, so the
+pod and Job object disappear after a successful run — read logs from
+the install pod *while it's running* (`kubectl logs -f
+job/<release>-fp-site-install`), or check `kubectl get events` for
+historical confirmation.
+
+If the Job fails, the upgrade fails too — the new Deployment still
+rolls (Helm hooks are non-blocking by default), but you'll see a
+loud error in `helm upgrade` output. Common cause: DB unreachable
+from the install pod. The Job's `set -e` script bails fast and
+`backoffLimit: 6` retries before failing the Job.
+
 ## Chart upgrade
 
 ```bash
 helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
-  --version 0.2.0 \
+  --version 0.2.1 \
   --namespace mysite \
   --reuse-values
 ```

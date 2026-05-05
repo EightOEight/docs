@@ -28,33 +28,40 @@ topology](/operations/production).
 
 ## What gets deployed
 
-```text
-                     ┌───────────────────┐
-                     │  fp-site Deployment│   replicas: 1 (configurable; HPA optional)
-                     │  (Caddy + FPHP)   │   ports: 8080 http, 9145 metrics
-                     └──────┬─────┬──────┘
-              ┌─────────────┘     └────────────┐
-              ▼                                 ▼
-     ┌─────────────────┐              ┌──────────────────┐
-     │ fp-site Service │              │ keys-salts Secret│
-     │ ClusterIP       │              │ (auto-generated  │
-     │                 │              │  on first install)│
-     └────────┬────────┘              └──────────────────┘
-              │ (optional)
-              │
-     ┌────────┴────────┐
-     │ Ingress / HTTP- │
-     │ Route (gated)   │
-     └─────────────────┘
+```mermaid
+flowchart TD
+    subgraph release["Per-release resources"]
+        deploy["<b>Deployment</b><br/>Caddy + FrankenPHP<br/>:8080 http, :9145 metrics"]
+        svc["<b>Service</b> (ClusterIP)"]
+        ingress(["Ingress / HTTPRoute<br/>(opt-in)"])
+        wpcron["<b>CronJob</b><br/>wp-cron (every 5 min)"]
+        installJob["<b>Job</b> (post-install + post-upgrade hooks)<br/>idempotent wp core install + update-db<br/>+ optional admin password sync"]
+        keys["Secret: keys+salts<br/>(auto-generated)"]
+        admin["Secret: admin install creds<br/>(auto-generated, or existingSecret)"]
+    end
 
-       Plus, when subcharts are enabled (defaults for kind):
-       • mysite-mariadb-0          (bitnami/mariadb)
-       • mysite-redis-master-0     (bitnami/redis)
-       • mysite-minio-*            (bitnami/minio)
-       • mysite-minio-console-*    (bitnami/minio)
+    subgraph subcharts["Bundled subcharts (kind dev only — NOT for production)"]
+        mariadb[("MariaDB<br/>bitnami/mariadb")]
+        redis[("Redis<br/>bitnami/redis")]
+        minio[("MinIO + Console<br/>bitnami/minio")]
+    end
 
-       Plus a CronJob for wp-cron (every 5 min by default).
+    deploy --> svc --> ingress
+    deploy -.reads.-> keys
+    deploy -.reads.-> mariadb
+    deploy -.reads.-> redis
+    deploy -.reads.-> minio
+    installJob -.reads.-> admin
+    installJob -.reads.-> keys
+    installJob -.installs WP into.-> mariadb
+    wpcron -.reads.-> keys
+    wpcron -.runs cron via.-> mariadb
 ```
+
+The install Job is new in chart **v0.2.0** — fresh deploys produce a
+usable site without manual `kubectl exec ... wp core install`. See
+[First install](#first-install) below for credentials and the
+`syncAdminCredentials` rotation flow.
 
 ## Subchart dependencies
 
@@ -76,17 +83,28 @@ topology](/operations/production).
 ## Values reference
 
 The full annotated values reference is in
-[`charts/fp-site/values.yaml`](https://github.com/EightOEight/fp-charts/blob/main/charts/fp-site/values.yaml).
-Key sections:
+[`charts/fp-site/values.yaml`](https://github.com/EightOEight/fp-charts/blob/main/charts/fp-site/values.yaml);
+the most-used keys:
 
-- **`image.*`** — your site image (`ghcr.io/<your-org>/<your-site>:<tag>`)
-- **`site.*`** — `url`, `env`, `wpPath`
-- **`keysSalts.*`** — auto-generate or use `existingSecret`
-- **`siteInstall.*`** — first-install Job (`wp core install` + `wp core update-db`); admin credentials, `existingSecret`, `syncAdminCredentials` (see below)
-- **`replicaCount`**, **`resources`**, **`autoscaling.*`** — scaling
-- **`ingress.*`** / **`httpRoute.*`** — routing (off by default; pick one)
-- **`mariadb.*`** / **`redis.*`** / **`minio.*`** — subchart toggles + image overrides
-- **`externalDatabase.*`** / **`externalCache.*`** / **`externalS3.*`** — used when subcharts are off
+| Key | Default | Purpose |
+|---|---|---|
+| `image.repository` | `eightoeight/fp-site-template` | Your site image |
+| `image.tag` | `""` (chart appVersion) | Pin per release |
+| `site.url` | `http://fp-site.localhost` | `WP_HOME` — must match your access URL |
+| `site.env` | `production` | Selects `config/environments/<env>.php` |
+| `keysSalts.autoGenerate` | `true` | Off → set `keysSalts.existingSecret` |
+| `siteInstall.enabled` | `true` | Off → skip auto `wp core install` (use for DB-restore deploys) |
+| `siteInstall.adminUser` | `admin` | Auto-generated path |
+| `siteInstall.existingSecret` | `""` | BYO Secret (key names configurable) |
+| `siteInstall.syncAdminCredentials` | `false` | Reconcile wp_users from Secret on every upgrade |
+| `replicaCount` | `1` | Deployment replicas (HPA optional) |
+| `ingress.enabled` / `httpRoute.enabled` | `false` / `false` | Pick one for external routing |
+| `mariadb.enabled` / `redis.enabled` / `minio.enabled` | `true` / `true` / `true` | Bundled subcharts (kind dev) |
+| `externalDatabase.host` | `""` | Used when `mariadb.enabled=false` |
+| `externalCache.host` | `""` | Used when `redis.enabled=false` |
+| `externalS3.bucket` | `site-media` | Used when `minio.enabled=false` |
+| `wpCron.schedule` | `*/5 * * * *` | wp-cron CronJob frequency |
+| `tmpfsSize.tmp` / `data` / `config` | `256Mi` / `64Mi` / `16Mi` | tmpfs sizes for the read-only-root pod |
 
 A condensed reference is at [Operations → Configuration](/operations/configuration).
 
