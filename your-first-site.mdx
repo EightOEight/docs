@@ -78,6 +78,13 @@ a working example of the result of every step below.
 
     Open `http://localhost:8080/wp/wp-admin/` and log in.
 
+    <Note>
+      Manual install is required only for the local Docker Compose
+      stack. When you deploy via the Helm chart (the next steps), the
+      chart runs `wp core install` automatically as a post-install hook
+      Job — see [fp-charts → First install](/components/fp-charts#first-install).
+    </Note>
+
     <Check>
       The "Update WordPress" / "Update Plugins" / "Update Themes"
       buttons should be **absent**. The lockdown is hard-coded in
