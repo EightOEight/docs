@@ -82,12 +82,98 @@ Key sections:
 - **`image.*`** — your site image (`ghcr.io/<your-org>/<your-site>:<tag>`)
 - **`site.*`** — `url`, `env`, `wpPath`
 - **`keysSalts.*`** — auto-generate or use `existingSecret`
+- **`siteInstall.*`** — first-install Job (`wp core install` + `wp core update-db`); admin credentials, `existingSecret`, `syncAdminCredentials` (see below)
 - **`replicaCount`**, **`resources`**, **`autoscaling.*`** — scaling
 - **`ingress.*`** / **`httpRoute.*`** — routing (off by default; pick one)
 - **`mariadb.*`** / **`redis.*`** / **`minio.*`** — subchart toggles + image overrides
 - **`externalDatabase.*`** / **`externalCache.*`** / **`externalS3.*`** — used when subcharts are off
 
 A condensed reference is at [Operations → Configuration](/operations/configuration).
+
+## First install
+
+The chart runs `wp core install` and `wp core update-db` from a
+post-install/post-upgrade Helm hook Job — a fresh `helm install`
+produces a usable WordPress site without any manual `kubectl exec`.
+
+The install step is idempotent (`wp core is-installed` short-circuits
+re-runs), so the Job is safe across `helm upgrade`s.
+
+### Default behavior
+
+By default, the chart creates a `<release>-fp-site-install` Secret with
+a random 32-char admin password. Retrieve it after install:
+
+```bash
+kubectl --namespace mysite get secret mysite-fp-site-install \
+  -o jsonpath='{.data.admin_password}' | base64 -d
+```
+
+Override the username, email, or password at install:
+
+```bash
+helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --set siteInstall.adminUser=alice \
+  --set siteInstall.adminEmail=alice@example.com \
+  --set siteInstall.adminPassword=please-change-me
+```
+
+### Bring-your-own Secret
+
+Point at a pre-existing Secret with the admin credentials:
+
+```yaml
+siteInstall:
+  existingSecret: mysite-admin
+  existingSecretAdminUserKey: admin_user      # default
+  existingSecretAdminEmailKey: admin_email    # default
+  existingSecretAdminPasswordKey: admin_password  # default
+```
+
+<Note>
+  The chart doesn't care how the Secret got there — `kubectl create secret`,
+  External Secrets Operator (any provider: AWS Secrets Manager, GCP Secret
+  Manager, Vault, 1Password), Sealed Secrets, SOPS-decrypted, anything
+  works. The configurable key names let the Secret use whatever schema
+  the source system produces.
+</Note>
+
+### Password rotation
+
+WordPress stores a *hash* of the admin password in `wp_users`, so simply
+updating the Secret value won't change the live login. Set
+`siteInstall.syncAdminCredentials: true` and the post-upgrade Job will
+run `wp user update` to push the Secret value into the DB on every
+release:
+
+```yaml
+siteInstall:
+  existingSecret: mysite-admin
+  syncAdminCredentials: true
+```
+
+Then any time the Secret value changes (manual edit, ESO sync, sealed
+secret rotation), trigger a `helm upgrade` and the Job reconciles
+`wp_users` to match.
+
+The **database password** rotates differently — the Deployment, wpcron
+CronJob, and install Job all read `DB_PASSWORD` from `secretKeyRef`, so
+when the Secret value changes, restarting pods picks up the new value
+automatically. No chart-side reconciliation needed.
+
+### Skipping install
+
+For sites being restored from an existing database dump:
+
+```bash
+helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+  --set siteInstall.enabled=false
+```
+
+`wp core update-db` is skipped too, so make sure your dump is
+schema-compatible with the WP core version baked into the site image.
+If it isn't, re-enable the Job after restore — `wp core is-installed`
+will short-circuit and only `update-db` will run.
 
 ## Production overrides example
 

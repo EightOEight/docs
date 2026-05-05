@@ -104,6 +104,20 @@ keysSalts:
   autoGenerate: true            # one-shot Job, or:
   existingSecret: ""            # External Secrets Operator's Secret name
 
+siteInstall:                    # post-install/post-upgrade `wp core install` + `update-db` Job
+  enabled: true                 # set false to skip (e.g. restoring from a DB dump)
+  title: "FrankenPress site"
+  adminUser: "admin"
+  adminEmail: "admin@example.com"
+  adminPassword: ""             # empty → generated; stored in <release>-fp-site-install Secret
+  autoGenerate: true            # render the install Secret; off if existingSecret is set
+  existingSecret: ""            # bring-your-own Secret (any source: ESO, Sealed, manual)
+  existingSecretAdminUserKey: "admin_user"
+  existingSecretAdminEmailKey: "admin_email"
+  existingSecretAdminPasswordKey: "admin_password"
+  syncAdminCredentials: false   # true → reconcile wp_users from Secret on every upgrade
+  skipEmail: true               # pass --skip-email to wp core install
+
 replicaCount: 1
 autoscaling:
   enabled: false                # set true + minReplicas/maxReplicas in prod
@@ -134,3 +148,46 @@ externalS3:                     # used when minio.enabled = false
   bucketUrl: ""                 # CDN URL, sets WP_CONTENT_URL
   existingSecret: ""            # keys: access-key, secret-key
 ```
+
+## Password rotation
+
+Two passwords participate in rotation: the **WordPress admin password**
+and the **database password**. They behave differently because of where
+WordPress reads each one.
+
+### Database password
+
+`DB_PASSWORD` is read from a `secretKeyRef` by the Deployment, the
+wpcron CronJob, and the install Job. When the Secret value changes
+(manual edit, External Secrets Operator sync, sealed-secret rotation,
+etc.), restart the Deployment and pods pick up the new value. No
+chart-side reconciliation is required.
+
+```bash
+kubectl rollout restart deployment/mysite-fp-site
+```
+
+Rotating the password on the DB server itself is the DB's lifecycle
+(mariadb-operator, RDS rotation, etc.) — the chart consumes whatever's
+in the Secret.
+
+### WordPress admin password
+
+WordPress stores a *hash* of the admin password in `wp_users`, so simply
+updating the Secret value won't change the live login. Set
+`siteInstall.syncAdminCredentials: true` and the post-upgrade install
+Job runs `wp user update` to push the Secret value into the DB on every
+release:
+
+```bash
+# 1. Whatever rotates your Secret updates the value:
+kubectl patch secret mysite-admin -p '{"stringData":{"admin_password":"new-value"}}'
+
+# 2. Trigger the post-upgrade Job:
+helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site --reuse-values
+```
+
+Default is `false` so a one-time install with a known password doesn't
+have post-upgrade runs silently overwriting a password the user changed
+via wp-admin. Enable it explicitly when the Secret is the source of
+truth.
