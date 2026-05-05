@@ -59,6 +59,14 @@ Bedrock-style:
       --admin_password=admin
     ```
     Visit `http://localhost:8080/wp/wp-admin/` and log in.
+
+    <Note>
+      This is a one-time step for local Docker Compose dev. The
+      [`fp-charts`](/components/fp-charts#first-install) Helm chart
+      runs `wp core install` automatically as a post-install hook
+      Job — that's a Helm-only mechanism, so the local Compose stack
+      still needs the manual command above.
+    </Note>
   </Step>
 </Steps>
 
