@@ -47,12 +47,19 @@ template repo unchanged — no fork required for the smoke test.
 
     ```bash
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-      --version 0.1.0 \
+      --version 0.2.0 \
       --namespace mysite --create-namespace \
       --wait --timeout=10m
     ```
 
     The `--wait` flag blocks until all pods are Ready. Expect 1–2 minutes on a cold image cache.
+
+    The chart runs `wp core install` automatically as a post-install
+    Helm hook Job — no manual `kubectl exec` step. Watch it complete:
+
+    ```bash
+    kubectl --namespace mysite get jobs --watch
+    ```
 
     <Tip>
       The default `image.repository` points at the demo site image
@@ -63,34 +70,36 @@ template repo unchanged — no fork required for the smoke test.
     </Tip>
   </Step>
 
-  <Step title="Visit your site">
-    Port-forward the Service to your local machine:
+  <Step title="Log in to your site">
+    Retrieve the auto-generated admin password:
+
+    ```bash
+    kubectl --namespace mysite get secret mysite-fp-site-install \
+      -o jsonpath='{.data.admin_password}' | base64 -d
+    ```
+
+    Port-forward the Service:
 
     ```bash
     kubectl --namespace mysite port-forward svc/mysite-fp-site 8080:80
     ```
 
-    On first install, run the WordPress installer:
-
-    ```bash
-    kubectl --namespace mysite exec deploy/mysite-fp-site -- \
-      wp --allow-root --path=/app/web/wp core install \
-        --url=http://localhost:8080 \
-        --title="My FrankenPress site" \
-        --admin_user=admin \
-        --admin_email=admin@example.com \
-        --admin_password=admin \
-        --skip-email
-    ```
-
-    Then open **http://localhost:8080/wp/wp-admin/** in your browser.
-    Log in with `admin` / `admin`.
+    Open **http://localhost:8080/wp/wp-admin/** in your browser. Log in
+    as `admin` with the password from the Secret above.
 
     <Check>
       You should see the WordPress admin dashboard. Confirm the
       "Update WordPress" / "Update Plugins" / "Update Themes" buttons
       are **absent** — the lockdown is hard-coded.
     </Check>
+
+    <Tip>
+      Want to set the admin password at install time instead of
+      retrieving the generated one? Pass
+      `--set siteInstall.adminPassword=your-password` on the `helm install`
+      line. See [`fp-charts` → First install](/components/fp-charts#first-install)
+      for the full options including bring-your-own Secret.
+    </Tip>
   </Step>
 </Steps>
 

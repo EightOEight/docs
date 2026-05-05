@@ -151,29 +151,29 @@ a working example of the result of every step below.
     kubectl config use-context kind-myfp
 
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-      --version 0.1.0 \
+      --version 0.2.0 \
       --namespace mysite --create-namespace \
       --set image.repository=ghcr.io/<owner>/<site> \
       --set image.tag=v0.1.0 \
       --wait --timeout=10m
     ```
 
-    Port-forward and run the WP installer:
+    The chart runs `wp core install` automatically as a post-install
+    hook Job — see [`fp-charts` → First install](/components/fp-charts#first-install)
+    for the admin credentials, bring-your-own-Secret, and rotation
+    options.
+
+    Port-forward and log in:
 
     ```bash
-    kubectl --namespace mysite port-forward svc/mysite-fp-site 8080:80 &
+    # Retrieve the auto-generated admin password
+    kubectl --namespace mysite get secret mysite-fp-site-install \
+      -o jsonpath='{.data.admin_password}' | base64 -d
 
-    kubectl --namespace mysite exec deploy/mysite-fp-site -- \
-      wp --allow-root --path=/app/web/wp core install \
-        --url=http://localhost:8080 \
-        --title="My site" \
-        --admin_user=admin \
-        --admin_email=admin@example.com \
-        --admin_password=admin \
-        --skip-email
+    kubectl --namespace mysite port-forward svc/mysite-fp-site 8080:80 &
     ```
 
-    Open `http://localhost:8080/wp/wp-admin/`.
+    Open `http://localhost:8080/wp/wp-admin/` and log in as `admin`.
 
     <Tip>
       The default install brings up bundled MariaDB + Redis + MinIO

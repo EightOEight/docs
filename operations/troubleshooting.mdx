@@ -61,7 +61,7 @@ WordPress returned an empty response. Common causes:
 
 - **No theme installed** — `roots/wordpress` is no-content (no bundled themes). Make sure the site composer-installs at least one theme (`fp-site-template` ships `wpackagist-theme/twentytwentyfive` by default).
 - **PHP fatal during request** — check the site pod logs for stack traces.
-- **WP not yet installed** — visit `/wp/wp-admin/install.php` and complete the install (or run `wp core install` via `kubectl exec`).
+- **WP not yet installed** — the install Job hasn't completed yet (or is disabled). Check `kubectl --namespace <ns> get jobs` for the `<release>-fp-site-install` Job; tail the most recent pod's logs for the failure. If `siteInstall.enabled=false`, run `wp core install` manually via `kubectl exec`.
 
 ## S3 symptoms
 
