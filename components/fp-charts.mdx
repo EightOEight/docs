@@ -156,6 +156,14 @@ siteInstall:
   the source system produces.
 </Note>
 
+<Tip>
+  Already running with auto-generated credentials and now want to move
+  them into your secret manager? See
+  [Production → Migrating auto-generated Secrets to a secret manager](/operations/production#migrating-auto-generated-secrets-to-a-secret-manager)
+  for the `kubectl get secret -o json | jq` extract commands (also
+  covers WP keys+salts and the DB / S3 Secrets).
+</Tip>
+
 ### Password rotation
 
 WordPress stores a *hash* of the admin password in `wp_users`, so simply
