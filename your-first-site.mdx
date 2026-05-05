@@ -156,12 +156,21 @@ a working example of the result of every step below.
     kubectl config use-context kind-myfp
 
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-      --version 0.2.0 \
+      --version 0.2.1 \
       --namespace mysite --create-namespace \
       --set image.repository=ghcr.io/<owner>/<site> \
       --set image.tag=v0.1.0 \
+      --set site.url=http://localhost:8080 \
       --wait --timeout=10m
     ```
+
+    <Note>
+      `--set site.url=http://localhost:8080` matches the port-forward
+      URL below. The default (`http://fp-site.localhost`) makes
+      WordPress 301-redirect every `localhost:8080` request away — see
+      [Quickstart](/quickstart) for the full explanation. For a real
+      deploy, set this to your public URL.
+    </Note>
 
     The chart runs `wp core install` automatically as a post-install
     hook Job — see [`fp-charts` → First install](/components/fp-charts#first-install)

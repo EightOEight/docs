@@ -47,12 +47,23 @@ template repo unchanged — no fork required for the smoke test.
 
     ```bash
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-      --version 0.2.0 \
+      --version 0.2.1 \
       --namespace mysite --create-namespace \
+      --set site.url=http://localhost:8080 \
       --wait --timeout=10m
     ```
 
     The `--wait` flag blocks until all pods are Ready. Expect 1–2 minutes on a cold image cache.
+
+    <Note>
+      `--set site.url=http://localhost:8080` matches the URL you'll
+      reach through `kubectl port-forward` in the next step. Without it,
+      `WP_HOME` defaults to `http://fp-site.localhost` and WordPress
+      301-redirects every `localhost:8080` request away — you'll see
+      "unknown app" or a connection error in the browser. For a real
+      deploy, set this to your public URL (and enable Ingress / HTTPRoute
+      instead of port-forward).
+    </Note>
 
     The chart runs `wp core install` automatically as a post-install
     Helm hook Job — no manual `kubectl exec` step. Watch it complete:
