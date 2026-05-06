@@ -17,6 +17,7 @@ are the consuming site's responsibility.
 | `FP_CACHE_TTL` | `5m` | Default cache entry TTL |
 | `FP_CACHE_STALE` | `1h` | Stale-while-revalidate window |
 | `FP_CACHE_DEFAULT_CONTROL` | `public, s-maxage=300` | `Cache-Control` fallback |
+| `FP_CACHE_BYPASS_EXTRA` | (empty) | Extra alternation fragment appended to the path-bypass regex (e.g. `\|^/api/private/`). See [components/fp-runtime → Cacheability model](/components/fp-runtime#cacheability-model). |
 | `FP_DOCROOT` | `/app/web` | WordPress webroot inside the container |
 | `FP_PORT` | `8080` | Public HTTP listen port |
 | `FP_METRICS_PORT` | `9145` | Prometheus metrics listen port |

@@ -60,10 +60,20 @@ WordPress lifecycle events.
 
 ### Hooks
 
-- `save_post`, `deleted_post`, `clean_post_cache` — invalidate the post URL + tag + home page
-- `comment_post`, `transition_comment_status` — invalidate the parent post
-- `switch_theme`, `permalink_structure_changed` — invalidate everything
-- `updated_option` (for `blogname`, `permalink_structure`, etc.) — invalidate everything
+The invalidator covers every WP write event whose output is templated
+into cached pages. Bounded changes invalidate the affected URL; changes
+with site-wide blast radius flush the entire HTTP cache. TTL expiry is
+the safety net for anything missed.
+
+| Category | Hooks | Action |
+|---|---|---|
+| Post lifecycle | `save_post`, `wp_trash_post`, `before_delete_post`, `deleted_post`, `clean_post_cache` | DEL post URL + tag + home |
+| Global-impact post types | `save_post` for `wp_navigation`, `wp_block`, `wp_template`, `wp_template_part`, `wp_global_styles` | `invalidate_all` |
+| Comments | `comment_post`, `transition_comment_status` | DEL parent post |
+| Term lifecycle | `created_term`, `edited_term`, `delete_term` | `invalidate_all` |
+| User lifecycle | `profile_update`, `user_register`, `deleted_user` | DEL author archive + home |
+| Site-wide | `switch_theme`, `permalink_structure_changed`, `wp_update_nav_menu`, `customize_save_after`, `activated_plugin`, `deactivated_plugin` | `invalidate_all` |
+| Options | `updated_option` for `blogname`, `home`, `siteurl`, `permalink_structure`, `sidebars_widgets`, `widget_*` | `invalidate_all` |
 
 ### Env vars
 

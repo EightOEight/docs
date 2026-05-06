@@ -52,6 +52,7 @@ All optional. Defaults produce a working config out of the box.
 | `FP_CACHE_TTL` | `5m` | Default cache entry TTL |
 | `FP_CACHE_STALE` | `1h` | Stale-while-revalidate window |
 | `FP_CACHE_DEFAULT_CONTROL` | `public, s-maxage=300` | `Cache-Control` fallback when upstream doesn't set one |
+| `FP_CACHE_BYPASS_EXTRA` | (empty) | Extra alternation fragment appended to the path-bypass regex. See [Cacheability model](#cacheability-model). |
 | `FP_DOCROOT` | `/app/web` | WordPress webroot inside the container |
 | `FP_PORT` | `8080` | Public HTTP listen port |
 | `FP_METRICS_PORT` | `9145` | Prometheus metrics listen port (separate from public traffic) |
@@ -69,6 +70,51 @@ Override at build time with `--build-arg`:
 | `CADDY_CBROTLI_VERSION` | `v1.0.1` |
 | `WP_CLI_VERSION` | `2.12.0` |
 | `FP_MU_PLUGIN_VERSION` | `v0.1.1` (set to `""` to skip baking) |
+
+## Cacheability model
+
+Souin caches **only anonymous GETs to public paths**. Two layers of
+bypass keep authenticated and admin traffic out of the cache, regardless
+of whether the upstream `Cache-Control` header is honoured by Souin
+itself (cache-handler v0.16.0 is unreliable about `no-store` /
+`private`):
+
+### Layer 1 — path bypass
+
+The global `cache` block uses `regex.exclude` to skip any path matching:
+
+```text
+^(/wp)?/(wp-admin/|wp-login\.php|wp-cron\.php|xmlrpc\.php|wp-json/)
+```
+
+Covers Bedrock (`/wp/...`) and classic (`/...`) layouts. Set
+`FP_CACHE_BYPASS_EXTRA` to add custom paths — the value is appended
+verbatim to the regex, so use an alternation fragment with a leading
+`|`:
+
+```bash
+FP_CACHE_BYPASS_EXTRA="|^/api/private/|^/members/"
+```
+
+### Layer 2 — cookie bypass
+
+A server-block matcher routes any request carrying a per-user state
+cookie around the `cache` directive entirely:
+
+```caddyfile
+@auth_or_state_cookie header_regexp Cookie (wordpress_logged_in_|wp-postpass_|comment_author_)
+```
+
+This is what stops a logged-in admin's response from being keyed into
+Redis under the URL anonymous visitors then read — the leak that
+prompted this design.
+
+### What's still cached
+
+Everything else: anonymous GETs to `/`, `/<slug>/`, `/category/<x>/`,
+feeds, sitemaps, etc. Per the standard HTTP semantics — upstream
+`Cache-Control` is honoured, with `FP_CACHE_DEFAULT_CONTROL` as the
+fallback when the response is silent.
 
 ## Page cache invalidation
 
