@@ -31,6 +31,7 @@ are the consuming site's responsibility.
 | `FP_S3_REGION` | `us-east-1` | |
 | `FP_S3_BUCKET_URL` | — | optional CDN URL |
 | `FP_S3_ENDPOINT` | — | optional, for non-AWS S3-compatible (MinIO, R2, GCS XML) |
+| `FP_S3_OBJECT_ACL` | (empty — no ACL) | optional S3 object ACL. Leave unset for buckets with **Object Ownership = "Bucket owner enforced"** (the AWS new-bucket default since April 2023). Set to `public-read` / `private` / `authenticated-read` only for ACL-enabled buckets. |
 | `FP_S3_DISABLED` | `false` | truthy → skip the bootstrap (**local dev only**) |
 
 When required vars are missing, the bootstrap registers
