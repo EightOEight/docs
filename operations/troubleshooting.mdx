@@ -139,6 +139,57 @@ externalS3:
 For new buckets, see
 [Recommended S3 bucket configuration](/operations/production#recommended-s3-bucket-configuration).
 
+### Logged-out browser sees logged-in admin content
+
+Admin pages were being served from cache. WP signals `Cache-Control:
+no-store, private` on `/wp-admin/` and the REST API, but cache-handler
+v0.16.0 doesn't reliably honour those directives.
+
+Fixed in fp-runtime v0.1.4+: the global `cache` block uses
+`regex.exclude` to skip every auth-aware path (`/wp-admin/`,
+`/wp-login.php`, `/wp-cron.php`, `/xmlrpc.php`, `/wp-json/`, including
+Bedrock `/wp/...` variants), and a server-block matcher routes any
+request carrying a `wordpress_logged_in_*`, `wp-postpass_*`, or
+`comment_author_*` cookie around the cache directive entirely. See
+[Cacheability model](/components/fp-runtime#cacheability-model).
+
+If you have custom auth-aware paths (membership area, signed-media
+endpoints), set `FP_CACHE_BYPASS_EXTRA` — appended verbatim to the
+bypass regex, so use an alternation fragment with a leading `|`:
+
+```bash
+FP_CACHE_BYPASS_EXTRA="|^/api/private/|^/members/"
+```
+
+If you're still on an older runtime and need an immediate flush, drop
+the cached admin keys directly:
+
+```bash
+kubectl -n <ns> exec <redis-pod> -- redis-cli --scan --pattern 'GET-*' \
+  | xargs -r kubectl -n <ns> exec <redis-pod> -- redis-cli DEL
+```
+
+### Edits saved but not reflected on view
+
+Post edit / trash / permanent-delete in wp-admin appears to succeed
+("Saved" / "Moved to trash") but the public URL keeps serving the old
+content until the cache TTL expires.
+
+Two distinct bugs converged in older releases:
+
+1. **Scheme mismatch** — Souin keyed cache entries with `http` while
+   WordPress emitted `https://...` URLs for invalidation. Fixed in
+   fp-runtime v0.1.3+ (Caddy now trusts the upstream proxy's
+   `X-Forwarded-Proto`) and fp-mu-plugin v0.2.1+ (DELs both schemes
+   defensively).
+2. **Hook timing** — `deleted_post` fires AFTER the row is gone, so
+   `get_permalink( $post_id )` returns false and the invalidator
+   no-ops. Fixed in fp-mu-plugin v0.2.2+ (also hooks `wp_trash_post`
+   and `before_delete_post`, which fire BEFORE the state change with
+   the permalink still resolvable).
+
+Bump both — the changes are co-required for full coverage.
+
 ## Helm symptoms
 
 ### `INSTALLATION FAILED: ... namespace ... is being terminated`
