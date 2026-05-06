@@ -71,6 +71,110 @@ documents the recommended swaps.
   </Accordion>
 </AccordionGroup>
 
+## Recommended S3 bucket configuration
+
+When you swap the bundled MinIO subchart for a real S3 (or R2 / GCS XML)
+bucket, configure it as below. These defaults match what
+[`fp-mu-plugin`](/components/fp-mu-plugin) v0.2.0+ expects.
+
+### Bucket settings
+
+| Setting | Value | Why |
+|---|---|---|
+| **Object Ownership** | **Bucket owner enforced** (ACLs disabled) | The AWS new-bucket default since April 2023. fp-mu-plugin v0.2.0+ omits the `x-amz-acl` header by default, which is exactly what this mode requires. Mismatched ACL settings on a bucket-owner-enforced bucket cause every PUT to silently abort with a [0-byte object](/operations/troubleshooting#0-byte-uploads-to-s3). |
+| **Block Public Access** | Block all public access — **on** if media is served via CDN; off only if the bucket itself is the public origin | Modern WP sites front media with CloudFront / Cloudflare and grant the CDN access via OAC / a bucket policy, not via per-object public ACLs. |
+| **Versioning** | Enabled | Cheap insurance against accidental overwrites or deletes. WP attachment edits (rotation, scaling) overwrite the original key on the s3-uploads stream wrapper. |
+| **Default encryption** | SSE-S3 (AES256) | The AWS default. SSE-KMS is fine too; KMS adds per-request cost and IAM friction for marginal threat-model benefit on public-by-design media. |
+| **Region** | Co-located with the cluster | Avoids cross-region GET latency on every cache miss + every WP-admin media library load. |
+
+### Block Public Access — pick one
+
+Block-public-access has four sub-toggles. Two scenarios:
+
+- **CDN-fronted (recommended):** all four toggles **on**. CloudFront /
+  Cloudflare reaches the bucket via an Origin Access Control (CloudFront)
+  or a bucket policy that whitelists the CDN's IP ranges /
+  service-account.
+- **Bucket as public origin:** "Block public ACLs" can stay on (we
+  don't set ACLs anyway in v0.2.0+); "Block public bucket policies"
+  must be off, and you attach a `s3:GetObject` policy for `*` /
+  `Principal: "*"`.
+
+### IAM policy (minimum required)
+
+The IAM principal humanmade/s3-uploads authenticates as needs:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::your-bucket-name/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::your-bucket-name"
+    }
+  ]
+}
+```
+
+Notable omissions:
+
+- **`s3:PutObjectAcl` is not needed** — the v0.2.0+ default sends no
+  ACL header. Granting it doesn't hurt but it's pointless on a
+  bucket-owner-enforced bucket (the API call would fail with
+  `AccessControlListNotSupported`).
+- **`s3:GetBucketLocation` is not needed** — humanmade/s3-uploads
+  doesn't issue `getBucketLocation`; we set the region via the
+  `FP_S3_REGION` env var.
+
+### CORS (only if you serve media on a different origin)
+
+If `bucketUrl` differs from `WP_HOME` (CDN domain, separate static
+host) and the WP admin's media library uses a `XHR.responseType =
+"blob"` flow against the bucket URL, browsers enforce CORS on the
+fetch:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://www.example.com", "https://admin.example.com"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Most WP installs don't need CORS — the front-end fetches images via
+`<img src>` (no CORS preflight) and the admin renders thumbnails
+server-side. Add the policy only when a console error surfaces.
+
+### Quick verification after creating the bucket
+
+```bash
+aws s3api get-bucket-ownership-controls --bucket your-bucket-name
+# Expected: ObjectOwnership: BucketOwnerEnforced
+
+aws s3api get-public-access-block --bucket your-bucket-name
+# Expected (CDN-fronted): all four flags true
+
+aws s3api put-object --bucket your-bucket-name --key probe.txt --body /dev/null
+aws s3api head-object --bucket your-bucket-name --key probe.txt
+# Expected: ContentLength: 0 — but only because the body is empty.
+# An upload that returns 200 with ContentLength: 0 on a non-empty
+# source means the bucket is dropping content — see troubleshooting.
+aws s3api delete-object --bucket your-bucket-name --key probe.txt
+```
+
 ## Migrating auto-generated Secrets to a secret manager
 
 If you ran `helm install` with the chart's defaults you already have a

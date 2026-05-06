@@ -97,29 +97,47 @@ file). WordPress shows the attachment as broken; thumbnails are also
 empty.
 
 Cause: humanmade/s3-uploads sends `x-amz-acl: public-read` on every PUT
-by default. If the bucket has **Object Ownership = "Bucket owner
-enforced"** (the AWS new-bucket default since April 2023, ACLs
-disabled), the PUT is aborted mid-stream and S3 keeps the empty object.
-This is the same root cause documented in
+by default. Buckets with **Object Ownership = "Bucket owner enforced"**
+(the AWS new-bucket default since April 2023, ACLs disabled) reject the
+ACL header and abort the PUT mid-stream, leaving the 0-byte object
+behind. Same root cause as
 [humanmade/S3-Uploads#587](https://github.com/humanmade/S3-Uploads/issues/587)
 and [#158](https://github.com/humanmade/S3-Uploads/issues/158).
 
-Fix: leave `FP_S3_OBJECT_ACL` unset (the default in fp-mu-plugin
-v0.2.0+). The bootstrap defines `S3_UPLOADS_OBJECT_ACL` as `null`,
-which omits the ACL header entirely. If you're on an older fp-mu-plugin
-or have the constant defined elsewhere, set it explicitly:
+**Fix**: on fp-mu-plugin v0.2.0+ this is the default — `FP_S3_OBJECT_ACL`
+is unset, the bootstrap defines `S3_UPLOADS_OBJECT_ACL` as `null`, and
+no ACL header is sent. Bump:
+
+```yaml
+# composer.json
+"eightoeight/fp-mu-plugin": "^0.2.0"
+```
+
+Confirm the deployed pod has no `FP_S3_OBJECT_ACL` set:
 
 ```bash
 kubectl --namespace <ns> get configmap <release>-fp-site-env -o yaml | grep FP_S3_OBJECT_ACL
+# Expected: no output
+```
+
+If you can't bump the dep right away, drop a one-line override into the
+site's `config/application.php`:
+
+```php
+Config::define( 'S3_UPLOADS_OBJECT_ACL', null );
 ```
 
 If the bucket genuinely needs ACLs (older bucket with Object Ownership
-= "Object writer" or "Bucket owner preferred"), opt back in:
+= "Object writer" or "Bucket owner preferred"), opt back in via the
+chart:
 
 ```yaml
 externalS3:
   objectAcl: public-read   # or `private`, `authenticated-read`
 ```
+
+For new buckets, see
+[Recommended S3 bucket configuration](/operations/production#recommended-s3-bucket-configuration).
 
 ## Helm symptoms
 
