@@ -150,30 +150,6 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     </Tip>
   </Step>
 
-  <Step title="Add plugins and themes">
-    Composer-managed (recommended):
-
-    ```bash
-    composer require wpackagist-plugin/seo-by-rank-math
-    composer require wpackagist-theme/twentytwentyfive
-    git add composer.json composer.lock
-    git commit -m "chore: add rank-math + twentytwentyfive"
-    git push
-    ```
-
-    Plugins land in `web/app/plugins/`, themes in `web/app/themes/`.
-    Custom code: drop a directory under the right `web/app/*` subtree
-    and commit it directly.
-
-    <Note>
-      Composer-installed plugins **do not auto-activate**. Run
-      `wp plugin activate <slug>` once after the next deploy (or
-      `make wp -- plugin activate <slug>` locally). The one exception
-      is `humanmade/s3-uploads`, which [`fp-mu-plugin`](/components/fp-mu-plugin)
-      loads explicitly.
-    </Note>
-  </Step>
-
   <Step title="Cut a release">
     The template's `build.yml` publishes images on every push to `main`
     (`:latest` + `:<short-sha>`) and on every `v*.*.*` tag (`:vX.Y.Z`
