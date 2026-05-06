@@ -1,0 +1,383 @@
+---
+title: "Customizing your site"
+description: "Add and remove plugins and themes the FrankenPress way — composer at build time, immutable image, declarative deploy"
+icon: "puzzle-piece"
+---
+
+WordPress on FrankenPress is **immutable at runtime**. Code (WP core,
+plugins, themes, custom files) is baked into the site image at build
+time; the running container's filesystem is read-only. The wp-admin
+"Add new" / "Upload" / "Activate" buttons that install plugins and
+themes from the dashboard are absent on purpose — anything they wrote
+would land on ephemeral container disk and vanish on the next pod
+restart, or replicate inconsistently across replicas.
+
+That trades convenience for two big wins: every site is reproducible
+from a tagged commit, and the same image can be promoted from staging
+to production with confidence.
+
+This page walks through the four common changes:
+
+- [Add a plugin](#add-a-plugin)
+- [Remove a plugin](#remove-a-plugin)
+- [Add a theme](#add-a-theme)
+- [Remove a theme](#remove-a-theme)
+
+All four follow the same shape: edit `composer.json` on a branch, ship
+a new image tag, point the cluster at it, and (for plugins/themes)
+run a one-time `wp` command to flip the wp_options state in the
+database. The flow assumes you're using the standard FrankenPress
+release flow — branches, tag-driven CI, GitOps for the cluster
+config. Adapt the cluster step to your own deploy mechanism if you're
+not.
+
+## Where plugins and themes come from
+
+FrankenPress sites use [Composer](https://getcomposer.org/) with the
+[wpackagist](https://wpackagist.org/) repository, so every plugin and
+theme on **WordPress.org** is composer-installable by slug:
+
+| Type | Composer name | Installs to |
+|---|---|---|
+| Plugin | `wpackagist-plugin/<slug>` | `web/app/plugins/<slug>/` |
+| Must-use plugin | `wpackagist-plugin/<slug>` (with installer override) | `web/app/mu-plugins/<slug>/` |
+| Theme | `wpackagist-theme/<slug>` | `web/app/themes/<slug>/` |
+
+The `<slug>` is the URL-slug from `wordpress.org/plugins/<slug>/` or
+`wordpress.org/themes/<slug>/`. Premium plugins / themes from
+elsewhere need a private repository entry in `composer.json` —
+out of scope for this page; see the
+[Composer + WordPress guide](https://roots.io/bedrock/docs/composer/)
+from the Roots project.
+
+## Add a plugin
+
+We'll add the [Classic Editor](https://wordpress.org/plugins/classic-editor/)
+plugin (maintained by the WP core team — restores the pre-Gutenberg
+editor for posts and pages). The flow is identical for any other
+plugin from WordPress.org.
+
+<Steps>
+  <Step title="Branch your site repo">
+    ```bash
+    git -C eoe checkout main
+    git -C eoe pull --ff-only
+    git -C eoe checkout -b feat/add-classic-editor
+    ```
+  </Step>
+
+  <Step title="Add the plugin via Composer">
+    Run `composer require` with the wpackagist slug. If you don't have
+    Composer installed locally, the Composer Docker image works too:
+
+    ```bash
+    docker run --rm -v "$PWD:/app" -w /app composer:2 \
+      require wpackagist-plugin/classic-editor:^1.6 --no-interaction
+    ```
+
+    This updates `composer.json`. The plugin lands in
+    `web/app/plugins/classic-editor/` once Composer installs, but
+    you don't need that locally — the next image build will install it.
+
+    <Note>
+      `composer.lock` is in `.gitignore` by default in
+      `fp-site-template` — every build resolves to the latest version
+      matching your constraint. Pin tightly (use `^1.6` not `*`) to
+      avoid surprise upgrades. Sites that want full reproducibility
+      can remove `composer.lock` from `.gitignore` and commit it.
+    </Note>
+  </Step>
+
+  <Step title="Commit and open a PR">
+    Only `composer.json` should have changed. Commit, push, open a PR:
+
+    ```bash
+    git -C eoe add composer.json
+    git -C eoe commit -m "feat: add Classic Editor plugin"
+    git -C eoe push -u origin feat/add-classic-editor
+    gh pr create
+    ```
+  </Step>
+
+  <Step title="Wait for CI, merge, tag a release">
+    Once CI is green and the PR is merged, tag a new release. The tag
+    is what triggers the image build:
+
+    ```bash
+    # Pull the squash-merged commit into local main
+    git -C eoe checkout main
+    git -C eoe pull --ff-only
+
+    # Tag and push (CI builds + pushes the image to GHCR)
+    git -C eoe tag -a v0.1.6 -m "feat: add Classic Editor"
+    git -C eoe push origin v0.1.6
+    ```
+
+    Watch the build:
+
+    ```bash
+    gh run watch --repo <owner>/<site>
+    ```
+  </Step>
+
+  <Step title="Update your GitOps values">
+    Bump `image.tag` in the values file your cluster pulls from. With
+    ArgoCD watching a Git repo:
+
+    ```yaml
+    # gitops/.../values.yaml
+    fp-site:
+      image:
+        tag: 0.1.6   # was 0.1.5
+    ```
+
+    Commit + push that. ArgoCD will sync on its next reconcile (a few
+    minutes by default) and roll the site Deployment.
+
+    If you're using `helm upgrade` directly instead of GitOps:
+
+    ```bash
+    helm upgrade <release> oci://ghcr.io/eightoeight/charts/fp-site \
+      --reuse-values --set image.tag=0.1.6
+    ```
+  </Step>
+
+  <Step title="Activate the plugin">
+    The plugin's *files* are now in the running pod, but WordPress
+    doesn't auto-activate plugins. Activation is stored in the
+    `wp_options.active_plugins` database row — DB state, not image
+    state. Activate it once with `wp-cli`:
+
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp plugin activate classic-editor --allow-root --path=/app/web/wp
+    ```
+
+    Activation persists across redeploys and replica scaling because
+    the database persists. You only run this command once per plugin,
+    not per release.
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    # Plugin is installed AND active
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp plugin list --allow-root --path=/app/web/wp \
+      | grep classic-editor
+    # expect: classic-editor    active   none    1.6.7
+    ```
+
+    Then visit the WordPress admin: **Posts → Add New** should now
+    open the classic editor instead of Gutenberg.
+  </Step>
+</Steps>
+
+## Remove a plugin
+
+The reverse of the add flow. Two extra rules:
+
+- **Deactivate before removing the files.** WordPress tolerates a
+  plugin disappearing from disk while still listed in
+  `active_plugins`, but it produces an admin notice on every load.
+  Cleaner to deactivate first.
+- **The DB still remembers the plugin's settings.** Most plugins
+  don't clean up their `wp_options` rows / custom tables on
+  deactivation; only on uninstall (which the lockdown also blocks
+  from the admin). Use `wp plugin uninstall` if you want a thorough
+  scrub.
+
+<Steps>
+  <Step title="Deactivate via wp-cli (against the live cluster)">
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp plugin deactivate classic-editor --allow-root --path=/app/web/wp
+    ```
+
+    Optional: also run `wp plugin uninstall classic-editor` if you
+    want the plugin's DB state cleaned up. (`uninstall` is safe to
+    run before file removal — it just runs the plugin's
+    `register_uninstall_hook` callback if defined.)
+  </Step>
+
+  <Step title="Remove from composer.json on a branch">
+    ```bash
+    git -C eoe checkout main && git -C eoe pull --ff-only
+    git -C eoe checkout -b chore/remove-classic-editor
+
+    docker run --rm -v "$PWD:/app" -w /app composer:2 \
+      remove wpackagist-plugin/classic-editor --no-interaction
+    ```
+  </Step>
+
+  <Step title="PR, merge, tag, GitOps bump">
+    Same shape as the add flow:
+
+    ```bash
+    git -C eoe add composer.json
+    git -C eoe commit -m "chore: remove Classic Editor plugin"
+    git -C eoe push -u origin chore/remove-classic-editor
+    gh pr create
+
+    # After merge:
+    git -C eoe checkout main && git -C eoe pull --ff-only
+    git -C eoe tag -a v0.1.7 -m "chore: remove Classic Editor"
+    git -C eoe push origin v0.1.7
+    ```
+
+    Then bump `image.tag` to `0.1.7` in your GitOps values.yaml.
+  </Step>
+
+  <Step title="Verify">
+    Once ArgoCD has synced and the new pods are up:
+
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp plugin list --allow-root --path=/app/web/wp \
+      | grep classic-editor || echo "classic-editor removed"
+    ```
+  </Step>
+</Steps>
+
+## Add a theme
+
+Themes follow the same shape as plugins, but live in a different
+composer/disk path. We'll use the
+[Twenty Twenty-Three](https://wordpress.org/themes/twentytwentythree/)
+theme as the example.
+
+<Steps>
+  <Step title="Branch and add via Composer">
+    ```bash
+    git -C eoe checkout main && git -C eoe pull --ff-only
+    git -C eoe checkout -b feat/add-twentytwentythree
+
+    docker run --rm -v "$PWD:/app" -w /app composer:2 \
+      require wpackagist-theme/twentytwentythree:^1.5 --no-interaction
+    ```
+
+    The theme files land in `web/app/themes/twentytwentythree/` at
+    image build time.
+  </Step>
+
+  <Step title="Commit, PR, merge, tag, GitOps bump">
+    Same as the plugin flow — `git add composer.json`, PR, merge, tag,
+    bump `image.tag` in GitOps values.yaml.
+  </Step>
+
+  <Step title="Activate the theme">
+    A site can have many installed themes but only one active at a
+    time. Activating swaps to the new theme:
+
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp theme activate twentytwentythree --allow-root --path=/app/web/wp
+    ```
+
+    The active theme is stored in `wp_options.template` /
+    `wp_options.stylesheet` — DB state. You can switch back at any
+    time without rebuilding the image, as long as the target theme is
+    in the image.
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp theme list --status=active --allow-root --path=/app/web/wp
+    # expect: twentytwentythree   active   ...
+    ```
+
+    Visit the public site — the look-and-feel reflects the new theme.
+  </Step>
+</Steps>
+
+## Remove a theme
+
+The big rule: **you can't remove the currently-active theme.**
+WordPress requires at least one valid theme in `wp-content/themes/`
+that matches `wp_options.template`, or it errors out. Switch to a
+different theme first.
+
+<Steps>
+  <Step title="Switch to a different active theme first">
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp theme activate <other-theme> --allow-root --path=/app/web/wp
+    ```
+
+    Confirm the public site renders correctly under the new theme
+    before continuing — this is the most-likely point of failure.
+  </Step>
+
+  <Step title="Remove from composer.json on a branch">
+    ```bash
+    git -C eoe checkout main && git -C eoe pull --ff-only
+    git -C eoe checkout -b chore/remove-twentytwentythree
+
+    docker run --rm -v "$PWD:/app" -w /app composer:2 \
+      remove wpackagist-theme/twentytwentythree --no-interaction
+    ```
+  </Step>
+
+  <Step title="PR, merge, tag, GitOps bump">
+    Same shape. Tag the next patch version, bump `image.tag` in
+    GitOps.
+  </Step>
+
+  <Step title="Verify">
+    After the new pods are up:
+
+    ```bash
+    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+      wp theme list --allow-root --path=/app/web/wp \
+      | grep twentytwentythree || echo "twentytwentythree removed"
+    ```
+  </Step>
+</Steps>
+
+## Common gotchas
+
+<AccordionGroup>
+  <Accordion title="The site image is stale after deploy" icon="ban">
+    Pods can run a cached image if they happened to schedule on a
+    node that already had it. Force a rollout to be sure:
+
+    ```bash
+    kubectl -n <ns> rollout restart deploy/<release>-fp-site
+    ```
+
+    Confirm with:
+
+    ```bash
+    kubectl -n <ns> get pods -l app.kubernetes.io/name=fp-site \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+    ```
+  </Accordion>
+
+  <Accordion title="`wp` returns 'This does not seem to be a WordPress installation'" icon="circle-question">
+    Always pass `--path=/app/web/wp` and `--allow-root` to `wp` inside
+    the container. The default working directory is `/app`, but
+    WordPress core lives at `/app/web/wp/` per the Bedrock layout.
+  </Accordion>
+
+  <Accordion title="Plugin activation fails with 'plugin file does not exist'" icon="triangle-exclamation">
+    The image build didn't include the plugin — usually because the
+    image rolled out is older than the one with your `composer.json`
+    change. Double-check the running pods'
+    `image` matches the tag you bumped to in GitOps.
+  </Accordion>
+
+  <Accordion title="Premium / non-WordPress.org plugins" icon="lock">
+    Sites with paid or self-hosted plugins use a custom Composer
+    repository entry in `composer.json` — typically a private VCS
+    repo or a [Satis](https://composer.github.io/satis/) /
+    [Composer Asset Server](https://composer-asset-server.com/)
+    instance. Out of scope here; see the
+    [Roots Bedrock Composer guide](https://roots.io/bedrock/docs/composer/).
+  </Accordion>
+</AccordionGroup>
+
+## Companion docs
+
+- [Architecture](/architecture) — why the image is immutable
+- [Components → fp-site-template](/components/fp-site-template) — the Bedrock-shaped repo this all targets
+- [Operations → upgrade](/operations/upgrade) — bumping the platform itself (runtime, mu-plugin, chart) follows the same release flow
