@@ -22,6 +22,9 @@ are the consuming site's responsibility.
 | `FP_PORT` | `8080` | Public HTTP listen port |
 | `FP_METRICS_PORT` | `9145` | Prometheus metrics listen port |
 
+The runtime emits Caddy access logs as JSON on stdout (public server
+only) and PHP errors on stderr. Shipping setup is in [Logging](/operations/logging).
+
 ## fp-mu-plugin: S3UploadsBootstrap
 
 | Var | Default | Required |

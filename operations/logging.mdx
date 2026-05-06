@@ -1,0 +1,172 @@
+---
+title: "Logging"
+description: "What FrankenPress writes to stdout/stderr and how to ship it to Grafana Loki, Datadog, or any other backend"
+icon: "scroll-text"
+---
+
+FrankenPress writes structured logs to **stdout/stderr**. Any cluster-side
+shipper that tails container streams (Vector, Grafana Alloy, Promtail,
+Datadog Agent, Fluent Bit) picks them up without pod-level config.
+The platform stays backend-neutral; you choose the destination.
+
+## What's emitted
+
+| Stream | Source | Format | When |
+|---|---|---|---|
+| stdout | Caddy access log | JSON, one line per request | Always (public server only) |
+| stderr | PHP errors | Plain text | Always — `php.ini` `error_log = /dev/stderr` |
+| stderr | WordPress debug log | Plain text | Only when `WP_ENV=staging` (routed to `php://stderr`) |
+
+The metrics server on `FP_METRICS_PORT` (default `9145`) is **not** access-logged
+on purpose — Prometheus scrapes every ~15s would otherwise dominate the
+log stream.
+
+A Caddy access log line looks like:
+
+```json
+{"level":"info","ts":1778097120.412,"logger":"http.log.access.log0","msg":"handled request","request":{"remote_ip":"10.244.0.5","method":"GET","host":"fp-site.example.com","uri":"/2026/05/welcome/","headers":{"User-Agent":["Mozilla/5.0"]}},"bytes_read":0,"user_id":"","duration":0.0341,"size":18234,"status":200,"resp_headers":{"Content-Type":["text/html; charset=UTF-8"],"Cache-Status":["Souin; hit; ttl=287"]}}
+```
+
+The `Cache-Status` response header tells you whether Souin served from
+cache (`hit`) or fell through to PHP (`miss`).
+
+## Recommended: Vector DaemonSet
+
+[Vector](https://vector.dev) is a vendor-neutral agent maintained by Datadog.
+A single DaemonSet ships to Loki, Datadog, both, or any other supported
+sink. This is the recommended path because it keeps the FrankenPress chart
+free of backend-specific glue.
+
+<Steps>
+<Step title="Install the Vector Helm chart in DaemonSet mode">
+```bash
+helm repo add vector https://helm.vector.dev
+helm install vector vector/vector \
+  --namespace observability --create-namespace \
+  --set role=Agent \
+  --values vector-values.yaml
+```
+</Step>
+
+<Step title="Provide a `vector.yaml` config">
+The example below tails container logs cluster-wide, parses Caddy's JSON
+access log, and ships to **both** Loki and Datadog. Drop whichever sink
+you don't want.
+
+```yaml vector-values.yaml
+customConfig:
+  data_dir: /vector-data-dir
+  api:
+    enabled: false
+
+  sources:
+    kubernetes:
+      type: kubernetes_logs
+      extra_label_selector: "app.kubernetes.io/name=fp-site"
+
+  transforms:
+    parse_caddy_json:
+      type: remap
+      inputs: [kubernetes]
+      source: |
+        # Caddy emits JSON on stdout; PHP/WP errors are plain on stderr.
+        if .stream == "stdout" {
+          parsed, err = parse_json(.message)
+          if err == null {
+            . = merge!(., parsed)
+            .source_type = "caddy_access"
+          }
+        } else {
+          .source_type = "php_error"
+        }
+
+  sinks:
+    # Grafana Loki (Grafana Cloud or self-hosted)
+    loki:
+      type: loki
+      inputs: [parse_caddy_json]
+      endpoint: https://logs-prod-XXX.grafana.net
+      auth:
+        strategy: basic
+        user: "${LOKI_USER}"
+        password: "${LOKI_API_KEY}"
+      labels:
+        namespace: '{{ kubernetes.pod_namespace }}'
+        pod: '{{ kubernetes.pod_name }}'
+        source: '{{ source_type }}'
+      encoding:
+        codec: json
+
+    # Datadog Logs
+    datadog:
+      type: datadog_logs
+      inputs: [parse_caddy_json]
+      default_api_key: "${DATADOG_API_KEY}"
+      site: datadoghq.com
+```
+</Step>
+
+<Step title="Verify in your backend">
+Generate traffic against the site, then check Loki Explore (filter
+`{source="caddy_access"}`) or Datadog Logs (`source:caddy_access`).
+You should see one entry per request with `status`, `duration`, `uri`,
+and `resp_headers` fields.
+</Step>
+</Steps>
+
+<Tip>
+Vector's `kubernetes_logs` source automatically picks up
+`app.kubernetes.io/name=fp-site` labels because the chart applies the
+standard Bitnami common labels. If you've overridden `nameOverride`,
+adjust the `extra_label_selector`.
+</Tip>
+
+## Alternative: Grafana Alloy / Promtail (Loki only)
+
+If you're a Loki-only shop and already run [Grafana
+Alloy](https://grafana.com/docs/alloy/) (or its predecessor Promtail), no
+FrankenPress-specific config is needed. The default
+`discovery.kubernetes` + `loki.source.kubernetes` pipeline tails all pod
+logs in the cluster. Filter by namespace or by the
+`app.kubernetes.io/name=fp-site` label in your Alloy config to scope to
+FrankenPress sites.
+
+## Alternative: Datadog Agent (autodiscovery)
+
+If you run the [Datadog Agent](https://docs.datadoghq.com/containers/kubernetes/log/)
+DaemonSet with log autodiscovery, set pod annotations on the FrankenPress
+release:
+
+```yaml
+podAnnotations:
+  ad.datadoghq.com/site.logs: |
+    [{"source": "caddy", "service": "fp-site"}]
+```
+
+The `site` segment of the annotation key is the container name in the
+deployment template (it's not configurable). The Datadog Agent will
+auto-tag each line with `source:caddy` and `service:fp-site` so its
+default Caddy log pipeline applies.
+
+## What's not shipped
+
+- **Subchart logs.** The chart's bundled `mariadb`, `redis`, and `minio`
+  subcharts each write their own logs to their own pod stdout. A
+  cluster-side shipper picks those up automatically — they're not
+  FrankenPress's concern. Production deploys typically disable the
+  subcharts and use external services (RDS, DragonflyDB Operator, AWS
+  S3) whose logs live wherever that operator/service writes them.
+- **wp-cron Job logs.** The `wpCron` CronJob writes to its own pod
+  stdout; a DaemonSet-mode shipper captures those lines too.
+- **Prometheus scrape access logs.** Suppressed on purpose (see above).
+  If you want them, add a `log` block inside the `:{$FP_METRICS_PORT}`
+  server in a forked `Caddyfile` — but you almost certainly don't.
+
+## Failure modes
+
+| Symptom | Likely cause |
+|---|---|
+| Only startup chatter in stdout, no per-request lines | You're on an `fp-runtime` image older than the JSON-access-log change. Pull the latest tag and `helm upgrade`. |
+| WP debug entries missing from logs in staging | `WP_DEBUG_LOG` was overridden to `true` (writes to disk); confirm it resolves to `php://stderr` in your `config/environments/staging.php`. |
+| Vector / Alloy isn't seeing the pod's logs | Label selector mismatch — verify `app.kubernetes.io/name=fp-site` is present on the pod (`kubectl get pod -o yaml | grep -A1 labels`). |
+| Cache-Status header missing from access log lines | Souin only sets it on requests that flow through the `cache` directive. Logged-in / authenticated requests bypass cache by design and show no `Cache-Status`. |

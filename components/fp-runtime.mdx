@@ -57,6 +57,13 @@ All optional. Defaults produce a working config out of the box.
 | `FP_PORT` | `8080` | Public HTTP listen port |
 | `FP_METRICS_PORT` | `9145` | Prometheus metrics listen port (separate from public traffic) |
 
+## Logging
+
+The public server emits Caddy access logs as JSON to stdout (one line per
+request); PHP errors flow to stderr via `php.ini`. The metrics server is
+intentionally unlogged. End-to-end shipping setup (Vector → Loki / Datadog)
+is in [Operations → Logging](/operations/logging).
+
 ## Build args
 
 Override at build time with `--build-arg`:
