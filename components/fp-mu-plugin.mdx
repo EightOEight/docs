@@ -14,7 +14,7 @@ considered **optional** and is the consumer site's responsibility.
 | [**S3UploadsBootstrap**](#s3uploadsbootstrap) | Configures [`humanmade/s3-uploads`](https://github.com/humanmade/S3-Uploads) from `FP_S3_*` env vars. **Refuses uploads** when S3 isn't fully configured (no silent local-disk fallback). |
 | [**SouinInvalidator**](#souininvalidator) | `DEL`s Souin's Redis cache entries directly on `save_post`, `clean_post_cache`, `switch_theme`, etc. — bypasses cache-handler's broken HTTP invalidation. |
 
-Composer name: `eightoeight/fp-mu-plugin`. Latest release: `v0.1.1`.
+Composer name: `eightoeight/fp-mu-plugin`. Latest release: `v0.2.0`.
 
 ## S3UploadsBootstrap
 
@@ -41,6 +41,7 @@ failure surfaces the misconfiguration immediately.
 | `FP_S3_REGION` | `us-east-1` | |
 | `FP_S3_BUCKET_URL` | — | optional CDN URL — auto-sets `WP_CONTENT_URL` if undefined |
 | `FP_S3_ENDPOINT` | — | optional, for non-AWS S3-compatible (MinIO, R2, GCS XML) |
+| `FP_S3_OBJECT_ACL` | (empty — no ACL) | optional S3 object ACL. Leave unset for buckets with Object Ownership = "Bucket owner enforced" (the AWS default since April 2023, ACLs disabled). Set to `public-read` / `private` / `authenticated-read` only for ACL-enabled buckets. See [troubleshooting → 0-byte uploads](/operations/troubleshooting#0-byte-uploads-to-s3). |
 | `FP_S3_DISABLED` | `false` | truthy → skip the bootstrap entirely (**local dev only — never in production**) |
 
 ### Endpoint filter (v0.1.1)

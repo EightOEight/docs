@@ -89,6 +89,38 @@ exist there. Two common causes:
 1. **`FP_S3_ENDPOINT` not honoured** — fp-mu-plugin **v0.1.0** had a bug where humanmade/s3-uploads' `S3_UPLOADS_ENDPOINT` constant was defined but not applied to the SDK. Upgrade to v0.1.1 or later (the bake default in `fp-runtime`).
 2. **Real AWS credentials misconfigured** — verify `FP_S3_KEY` and `FP_S3_SECRET` are correct, and the IAM principal has `s3:GetObject` / `s3:PutObject` / `s3:DeleteObject` / `s3:ListBucket` on the bucket.
 
+### 0-byte uploads to S3
+
+Media uploads land in S3 with the right key + path, but `Content-Length:
+0` and ETag `d41d8cd98f00b204e9800998ecf8427e` (the MD5 of an empty
+file). WordPress shows the attachment as broken; thumbnails are also
+empty.
+
+Cause: humanmade/s3-uploads sends `x-amz-acl: public-read` on every PUT
+by default. If the bucket has **Object Ownership = "Bucket owner
+enforced"** (the AWS new-bucket default since April 2023, ACLs
+disabled), the PUT is aborted mid-stream and S3 keeps the empty object.
+This is the same root cause documented in
+[humanmade/S3-Uploads#587](https://github.com/humanmade/S3-Uploads/issues/587)
+and [#158](https://github.com/humanmade/S3-Uploads/issues/158).
+
+Fix: leave `FP_S3_OBJECT_ACL` unset (the default in fp-mu-plugin
+v0.2.0+). The bootstrap defines `S3_UPLOADS_OBJECT_ACL` as `null`,
+which omits the ACL header entirely. If you're on an older fp-mu-plugin
+or have the constant defined elsewhere, set it explicitly:
+
+```bash
+kubectl --namespace <ns> get configmap <release>-fp-site-env -o yaml | grep FP_S3_OBJECT_ACL
+```
+
+If the bucket genuinely needs ACLs (older bucket with Object Ownership
+= "Object writer" or "Bucket owner preferred"), opt back in:
+
+```yaml
+externalS3:
+  objectAcl: public-read   # or `private`, `authenticated-read`
+```
+
 ## Helm symptoms
 
 ### `INSTALLATION FAILED: ... namespace ... is being terminated`
