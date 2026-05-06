@@ -1,16 +1,17 @@
 ---
 title: "Your first site"
-description: "Fork the template, customise, publish, deploy"
+description: "Create your repo, build your image, deploy your site"
 icon: "code-branch"
 ---
 
 The [Quickstart](/quickstart) deploys the upstream demo image. This guide
-walks the **builder** path: fork [`fp-site-template`](https://github.com/EightOEight/fp-site-template),
+walks the **builder** path: create your own copy of
+[`fp-site-template`](https://github.com/EightOEight/fp-site-template),
 let it self-customise, push your own image, and deploy that.
 
-A reference fork lives at
-[`MatthewKennedy/frankenpress-demo`](https://github.com/MatthewKennedy/frankenpress-demo) —
-a working example of the result of every step below.
+We'll call your new repo **`mysite`** throughout — substitute whatever
+name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
+**`<owner>`** — your GitHub account or organisation.
 
 ## Prerequisites
 
@@ -29,10 +30,58 @@ a working example of the result of every step below.
 </AccordionGroup>
 
 <Steps>
-  <Step title="Use the template">
-    Click **[Use this template](https://github.com/EightOEight/fp-site-template/generate)**
-    on `fp-site-template`. Pick an owner (your account or org) and a
-    name — for the rest of this guide we'll use `<owner>/<site>`.
+  <Step title="Create your site repo">
+    GitHub gives you two ways to derive a new repo from
+    `fp-site-template`. Pick whichever matches how closely you want to
+    track upstream.
+
+    <Tabs>
+      <Tab title="Use this template (recommended)">
+        Click **[Use this template](https://github.com/EightOEight/fp-site-template/generate)**
+        on `fp-site-template`. Pick an owner and the name `mysite`
+        (or whatever you prefer).
+
+        - **Pros.** Clean new repo without the template's full git history.
+          No "forked from" badge in the GitHub UI. You explicitly choose
+          which upstream changes to pull in by cherry-picking — easier
+          to keep your repo's history representative of *your* site
+          rather than the template's churn.
+        - **Cons.** No "Sync fork" button. To pull upstream improvements
+          (CI tweaks, lockdown changes, etc.) you add the template as
+          a remote and cherry-pick:
+
+          ```bash
+          git remote add upstream https://github.com/EightOEight/fp-site-template
+          git fetch upstream
+          git log --oneline upstream/main ^main | head      # what's new
+          git cherry-pick <sha>...<sha>                     # adopt selectively
+          ```
+
+        Best for production-track sites that will diverge from the
+        template over time.
+      </Tab>
+      <Tab title="Fork">
+        Click **[Fork](https://github.com/EightOEight/fp-site-template/fork)**
+        on `fp-site-template`. Pick an owner and the name `mysite`.
+
+        - **Pros.** Shared git history with the template. The "Sync
+          fork" button in the GitHub UI does the right thing for trivial
+          upstream tracking. Easier when your site stays close to the
+          template shape.
+        - **Cons.** GitHub shows a "forked from" badge. Can't be made
+          private if `fp-site-template` stays public, without using
+          GitHub's private-fork dance. "Sync fork" auto-merges *every*
+          upstream commit, which isn't always what you want for a
+          production site — once you have meaningful divergence,
+          you'll be cherry-picking anyway.
+
+        Best for read-along-with-upstream demos, training environments,
+        and short-lived experiments.
+      </Tab>
+    </Tabs>
+
+    Whichever you pick, you'll end up with a new repo at
+    `github.com/<owner>/mysite`.
 
     Within ~30 seconds GitHub Actions runs the **template-cleanup**
     workflow on your new repo. It does three things:
@@ -47,19 +96,19 @@ a working example of the result of every step below.
     and `chore: initialize from fp-site-template`. Watch progress with:
 
     ```bash
-    gh run watch --repo <owner>/<site>
+    gh run watch --repo <owner>/mysite
     ```
 
     <Check>
-      After ~2 minutes, `ghcr.io/<owner>/<site>:latest` is pullable
+      After ~2 minutes, `ghcr.io/<owner>/mysite:latest` is pullable
       and the workflows tab shows green `template-cleanup` + `build` runs.
     </Check>
   </Step>
 
   <Step title="Clone and run locally">
     ```bash
-    git clone git@github.com:<owner>/<site>.git
-    cd <site>
+    git clone git@github.com:<owner>/mysite.git
+    cd mysite
     make setup     # composer install + .env from .env.example
     make up        # docker compose up -d (site + mariadb + redis + minio)
     ```
@@ -142,7 +191,7 @@ a working example of the result of every step below.
     ```
 
     <Check>
-      Three image tags now exist on `ghcr.io/<owner>/<site>`:
+      Three image tags now exist on `ghcr.io/<owner>/mysite`:
       - `:latest` (moves on every main push)
       - `:<short-sha>` (immutable per commit)
       - `:v0.1.0` (immutable per tag — use this in production)
@@ -165,7 +214,7 @@ a working example of the result of every step below.
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
       --version 0.2.2 \
       --namespace mysite --create-namespace \
-      --set image.repository=ghcr.io/<owner>/<site> \
+      --set image.repository=ghcr.io/<owner>/mysite \
       --set image.tag=v0.1.0 \
       --set site.url=http://localhost:8080 \
       --wait --timeout=10m
@@ -206,7 +255,14 @@ a working example of the result of every step below.
 
 ## What's next
 
+You've got `mysite` building, deployed, and serving. The natural next
+step is making it yours — adding plugins, picking a theme, swapping
+defaults.
+
 <CardGroup cols={2}>
+  <Card title="Customizing your site" icon="puzzle-piece" href="/customizing">
+    Add and remove plugins and themes the FrankenPress way — composer at build time, immutable image tag, GitOps deploy.
+  </Card>
   <Card title="Production topology" icon="cloud" href="/operations/production">
     Replace bundled subcharts with operator-managed databases + AWS S3.
   </Card>
@@ -214,20 +270,6 @@ a working example of the result of every step below.
     Every `FP_*` and `WP_*` variable the platform reads, with defaults.
   </Card>
   <Card title="Upgrade flow" icon="arrows-rotate" href="/operations/upgrade">
-    `git tag` → CI → `helm upgrade --set image.tag=...` per environment.
-  </Card>
-  <Card title="Troubleshooting" icon="bug" href="/operations/troubleshooting">
-    "Update WordPress" buttons missing? Pod stuck in CrashLoop? Read this first.
+    `git tag` → CI → image build → `helm upgrade --set image.tag=...` per environment.
   </Card>
 </CardGroup>
-
-## Reference fork
-
-[`MatthewKennedy/frankenpress-demo`](https://github.com/MatthewKennedy/frankenpress-demo)
-is a public fork of `fp-site-template` kept as a worked example. Its
-commit history shows exactly the substitutions the cleanup workflow
-applies, and its `ghcr.io/matthewkennedy/frankenpress-demo:v0.1.0`
-package is the artefact a production install would deploy.
-
-If your run diverges from what's documented here, compare against that
-repo to triangulate the difference.

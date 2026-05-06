@@ -31,6 +31,14 @@ release flow — branches, tag-driven CI, GitOps for the cluster
 config. Adapt the cluster step to your own deploy mechanism if you're
 not.
 
+<Note>
+  The commands below use **`mysite`** as the example name for your
+  site repo's local directory — substitute whatever your fork is
+  called (e.g. `my-blog`, `acme-marketing`, etc.). Same for **`<ns>`** /
+  **`<release>`** in the cluster commands — your Kubernetes namespace
+  and Helm release name.
+</Note>
+
 ## Prerequisites
 
 You'll need [Composer](https://getcomposer.org/) installed locally to add
@@ -113,9 +121,9 @@ plugin from WordPress.org.
 <Steps>
   <Step title="Branch your site repo">
     ```bash
-    git -C eoe checkout main
-    git -C eoe pull --ff-only
-    git -C eoe checkout -b feat/add-classic-editor
+    git -C mysite checkout main
+    git -C mysite pull --ff-only
+    git -C mysite checkout -b feat/add-classic-editor
     ```
   </Step>
 
@@ -123,7 +131,7 @@ plugin from WordPress.org.
     Run `composer require` with the wpackagist slug:
 
     ```bash
-    cd eoe
+    cd mysite
     composer require wpackagist-plugin/classic-editor:^1.6
     ```
 
@@ -144,9 +152,9 @@ plugin from WordPress.org.
     Only `composer.json` should have changed. Commit, push, open a PR:
 
     ```bash
-    git -C eoe add composer.json
-    git -C eoe commit -m "feat: add Classic Editor plugin"
-    git -C eoe push -u origin feat/add-classic-editor
+    git -C mysite add composer.json
+    git -C mysite commit -m "feat: add Classic Editor plugin"
+    git -C mysite push -u origin feat/add-classic-editor
     gh pr create
     ```
   </Step>
@@ -157,18 +165,18 @@ plugin from WordPress.org.
 
     ```bash
     # Pull the squash-merged commit into local main
-    git -C eoe checkout main
-    git -C eoe pull --ff-only
+    git -C mysite checkout main
+    git -C mysite pull --ff-only
 
     # Tag and push (CI builds + pushes the image to GHCR)
-    git -C eoe tag -a v0.1.6 -m "feat: add Classic Editor"
-    git -C eoe push origin v0.1.6
+    git -C mysite tag -a v0.1.6 -m "feat: add Classic Editor"
+    git -C mysite push origin v0.1.6
     ```
 
     Watch the build:
 
     ```bash
-    gh run watch --repo <owner>/<site>
+    gh run watch --repo <owner>/mysite
     ```
   </Step>
 
@@ -253,10 +261,10 @@ The reverse of the add flow. Two extra rules:
 
   <Step title="Remove from composer.json on a branch">
     ```bash
-    git -C eoe checkout main && git -C eoe pull --ff-only
-    git -C eoe checkout -b chore/remove-classic-editor
+    git -C mysite checkout main && git -C mysite pull --ff-only
+    git -C mysite checkout -b chore/remove-classic-editor
 
-    cd eoe
+    cd mysite
     composer remove wpackagist-plugin/classic-editor
     ```
   </Step>
@@ -265,15 +273,15 @@ The reverse of the add flow. Two extra rules:
     Same shape as the add flow:
 
     ```bash
-    git -C eoe add composer.json
-    git -C eoe commit -m "chore: remove Classic Editor plugin"
-    git -C eoe push -u origin chore/remove-classic-editor
+    git -C mysite add composer.json
+    git -C mysite commit -m "chore: remove Classic Editor plugin"
+    git -C mysite push -u origin chore/remove-classic-editor
     gh pr create
 
     # After merge:
-    git -C eoe checkout main && git -C eoe pull --ff-only
-    git -C eoe tag -a v0.1.7 -m "chore: remove Classic Editor"
-    git -C eoe push origin v0.1.7
+    git -C mysite checkout main && git -C mysite pull --ff-only
+    git -C mysite tag -a v0.1.7 -m "chore: remove Classic Editor"
+    git -C mysite push origin v0.1.7
     ```
 
     Then bump `image.tag` to `0.1.7` in your GitOps values.yaml.
@@ -300,10 +308,10 @@ theme as the example.
 <Steps>
   <Step title="Branch and add via Composer">
     ```bash
-    git -C eoe checkout main && git -C eoe pull --ff-only
-    git -C eoe checkout -b feat/add-twentytwentythree
+    git -C mysite checkout main && git -C mysite pull --ff-only
+    git -C mysite checkout -b feat/add-twentytwentythree
 
-    cd eoe
+    cd mysite
     composer require wpackagist-theme/twentytwentythree:^1.5
     ```
 
@@ -362,10 +370,10 @@ different theme first.
 
   <Step title="Remove from composer.json on a branch">
     ```bash
-    git -C eoe checkout main && git -C eoe pull --ff-only
-    git -C eoe checkout -b chore/remove-twentytwentythree
+    git -C mysite checkout main && git -C mysite pull --ff-only
+    git -C mysite checkout -b chore/remove-twentytwentythree
 
-    cd eoe
+    cd mysite
     composer remove wpackagist-theme/twentytwentythree
     ```
   </Step>
