@@ -108,6 +108,10 @@ the most-used keys:
 
 A condensed reference is at [Operations → Configuration](/operations/configuration).
 
+The chart deliberately doesn't ship a log shipper — pod streams are
+backend-neutral and any cluster-side agent picks them up. Setup for
+Vector / Grafana Alloy / Datadog Agent is in [Operations → Logging](/operations/logging).
+
 ## First install
 
 The chart runs `wp core install` and `wp core update-db` from a

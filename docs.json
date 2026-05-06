@@ -39,6 +39,7 @@
               "operations/configuration",
               "operations/runtime-matrix",
               "operations/upgrade",
+              "operations/logging",
               "operations/troubleshooting"
             ]
           }
