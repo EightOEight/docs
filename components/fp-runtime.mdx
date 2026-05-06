@@ -116,6 +116,36 @@ feeds, sitemaps, etc. Per the standard HTTP semantics — upstream
 `Cache-Control` is honoured, with `FP_CACHE_DEFAULT_CONTROL` as the
 fallback when the response is silent.
 
+### Note on cache key scheme
+
+You will see `Cache-Status` headers like:
+
+```text
+cache-status: Souin; hit; key=GET-http-eightoeight.tech-/
+```
+
+Even though the client used `https://`. This is intentional and
+benign:
+
+- Caddy 2.7.x's `trusted_proxies` directive controls which upstream
+  hops may set `X-Forwarded-For` (client IP propagation). It does
+  **not** propagate `X-Forwarded-Proto` into the request scheme that
+  Souin reads. So when a TLS-terminating proxy (Envoy Gateway,
+  Cloudflare, an LB) sits in front, Souin sees plain HTTP from inside
+  the cluster and keys cache entries with `http` regardless of how
+  the client connected.
+- The two failure modes this *could* matter for are both already
+  closed: authenticated requests are bypassed entirely via the cookie
+  matcher, and invalidation works regardless via fp-mu-plugin
+  v0.2.1+'s dual-scheme DEL (the `SouinInvalidator` deletes both
+  `GET-http-...` and `GET-https-...` variants on every write).
+
+You can flip the key to `https` natively with either
+`cache_keys { .+ { disable_scheme } }` (drops scheme from the key
+shape; needs a coordinated invalidator update + cache flush) or an
+out-of-tree Caddy plugin that rewrites `r.URL.Scheme`. Neither is
+worth the churn for what is purely a `Cache-Status` cosmetic.
+
 ## Page cache invalidation
 
 Souin caches GET responses in Redis. Invalidation is performed by
