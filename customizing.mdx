@@ -31,6 +31,59 @@ release flow — branches, tag-driven CI, GitOps for the cluster
 config. Adapt the cluster step to your own deploy mechanism if you're
 not.
 
+## Prerequisites
+
+You'll need [Composer](https://getcomposer.org/) installed locally to add
+or remove packages. If you already have it, skip ahead.
+
+<AccordionGroup>
+  <Accordion title="macOS" icon="apple">
+    ```bash
+    brew install composer
+    ```
+
+    Verify:
+
+    ```bash
+    composer --version
+    # Composer version 2.x.x ...
+    ```
+  </Accordion>
+
+  <Accordion title="Linux" icon="linux">
+    Most distros package an outdated Composer; the official installer is
+    safer:
+
+    ```bash
+    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+    php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+    rm composer-setup.php
+    composer --version
+    ```
+
+    See the [official install guide](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos) for
+    a checksum-verified flow.
+  </Accordion>
+
+  <Accordion title="Windows" icon="windows">
+    Use the [Composer-Setup.exe installer](https://getcomposer.org/Composer-Setup.exe)
+    from getcomposer.org. Run the rest of the commands on this page in
+    Git Bash / WSL / PowerShell — adjust quoting as needed.
+  </Accordion>
+
+  <Accordion title="No Composer? Use the Docker image" icon="docker">
+    If you can't or don't want to install Composer, the
+    [official `composer:2` Docker image](https://hub.docker.com/_/composer)
+    is a drop-in. Replace `composer <args>` with:
+
+    ```bash
+    docker run --rm -v "$PWD:/app" -w /app composer:2 <args>
+    ```
+
+    The rest of this guide assumes you have `composer` on `$PATH`.
+  </Accordion>
+</AccordionGroup>
+
 ## Where plugins and themes come from
 
 FrankenPress sites use [Composer](https://getcomposer.org/) with the
@@ -67,12 +120,11 @@ plugin from WordPress.org.
   </Step>
 
   <Step title="Add the plugin via Composer">
-    Run `composer require` with the wpackagist slug. If you don't have
-    Composer installed locally, the Composer Docker image works too:
+    Run `composer require` with the wpackagist slug:
 
     ```bash
-    docker run --rm -v "$PWD:/app" -w /app composer:2 \
-      require wpackagist-plugin/classic-editor:^1.6 --no-interaction
+    cd eoe
+    composer require wpackagist-plugin/classic-editor:^1.6
     ```
 
     This updates `composer.json`. The plugin lands in
@@ -204,8 +256,8 @@ The reverse of the add flow. Two extra rules:
     git -C eoe checkout main && git -C eoe pull --ff-only
     git -C eoe checkout -b chore/remove-classic-editor
 
-    docker run --rm -v "$PWD:/app" -w /app composer:2 \
-      remove wpackagist-plugin/classic-editor --no-interaction
+    cd eoe
+    composer remove wpackagist-plugin/classic-editor
     ```
   </Step>
 
@@ -251,8 +303,8 @@ theme as the example.
     git -C eoe checkout main && git -C eoe pull --ff-only
     git -C eoe checkout -b feat/add-twentytwentythree
 
-    docker run --rm -v "$PWD:/app" -w /app composer:2 \
-      require wpackagist-theme/twentytwentythree:^1.5 --no-interaction
+    cd eoe
+    composer require wpackagist-theme/twentytwentythree:^1.5
     ```
 
     The theme files land in `web/app/themes/twentytwentythree/` at
@@ -313,8 +365,8 @@ different theme first.
     git -C eoe checkout main && git -C eoe pull --ff-only
     git -C eoe checkout -b chore/remove-twentytwentythree
 
-    docker run --rm -v "$PWD:/app" -w /app composer:2 \
-      remove wpackagist-theme/twentytwentythree --no-interaction
+    cd eoe
+    composer remove wpackagist-theme/twentytwentythree
     ```
   </Step>
 
