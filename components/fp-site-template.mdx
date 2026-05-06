@@ -35,6 +35,58 @@ Bedrock-style:
         └── themes/            # composer require wpackagist-theme/...
 ```
 
+## What is Bedrock and why use it?
+
+[Bedrock](https://roots.io/bedrock/) is [Roots'](https://roots.io/)
+opinionated shape for WordPress sites: WordPress is treated as a
+**versioned dependency** rather than something you commit, the
+filesystem is laid out for clean separation of code and runtime data,
+and configuration lives in one place per environment instead of being
+scattered across `wp-config.php` and the database.
+
+`fp-site-template` is Bedrock-style — composer-managed, with the
+canonical `web/wp` + `web/app` + `config/` split — because the whole
+FrankenPress proposition (immutable image, declarative deploy) breaks
+down without it. There needs to be a clear answer to "what's code?"
+and "what's data?" before you can confidently bake one into an image
+and leave the other in a database / S3 bucket.
+
+### What each Roots package does for you
+
+The site composer-requires four small Roots packages. Each one does
+one thing:
+
+| Package | Job |
+|---|---|
+| [`roots/wordpress`](https://packagist.org/packages/roots/wordpress) | Composer-installable WordPress core — no bundled themes, no sample content. Lands at `web/wp/` (gitignored). Lets you treat WP as a versioned dependency. |
+| [`roots/wp-config`](https://packagist.org/packages/roots/wp-config) | Thin loader (`web/wp-config.php`) that defers all config to `config/application.php`. Single source of truth for site config — plugins can't mutate it behind your back. |
+| [`roots/bedrock-autoloader`](https://packagist.org/packages/roots/bedrock-autoloader) | Scans `web/app/mu-plugins/<dir>/` and loads each one's main file. Required because WordPress only auto-loads `.php` files at the *root* of `mu-plugins/`, not in subdirectories — and composer-installed mu-plugins always end up in subdirectories. |
+| [`roots/bedrock-disallow-indexing`](https://packagist.org/packages/roots/bedrock-disallow-indexing) | When `DISALLOW_INDEXING` is true, forces `blog_public = 0` (noindex meta + robots.txt `Disallow: /`) and adds an admin notice with the current `WP_ENV`. Fires automatically on `staging` / `development`, no-ops on `production`. |
+
+[`vlucas/phpdotenv`](https://packagist.org/packages/vlucas/phpdotenv)
+and [`oscarotero/env`](https://packagist.org/packages/oscarotero/env)
+sit alongside — they read `.env` into `$_ENV` for local dev and provide
+the `env('FOO')` helper used throughout `application.php`. In
+production the Helm chart sets env vars directly via the ConfigMap,
+so `.env` isn't loaded at all.
+
+### Bedrock vs the other Roots projects
+
+Roots also publishes [Sage](https://roots.io/sage/) (modern build
+tooling for a custom theme) and [Trellis](https://roots.io/trellis/)
+(Ansible-based provisioning for Bedrock sites on VMs). Neither is used
+by FrankenPress:
+
+- **Sage** is theme-side — orthogonal to the site shape. You can use
+  Sage on top of a FrankenPress site if you like; the runtime doesn't
+  care which theme you ship.
+- **Trellis** is the operational layer Bedrock sites traditionally
+  paired with — VMs, Ansible, Nginx, PHP-FPM. FrankenPress *replaces*
+  Trellis: containerised single-process runtime, declarative Helm
+  deploy, immutable image. If you're coming from a Trellis-shaped
+  Bedrock site, FrankenPress is the migration target — keep Bedrock,
+  drop Trellis.
+
 ## Forking
 
 <Steps>
