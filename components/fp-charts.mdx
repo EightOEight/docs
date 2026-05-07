@@ -16,7 +16,7 @@ The chart is published as an OCI artifact on GHCR:
 
 ```bash
 helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-  --version 0.1.0 \
+  --version 0.4.1 \
   --namespace mysite --create-namespace
 ```
 
@@ -102,6 +102,7 @@ the most-used keys:
 | `siteInstall.existingSecret` | `""` | BYO Secret (key names configurable) |
 | `syncAdminCredentials` | `true` | InitContainer that reconciles wp_users from the install Secret on every Pod start (idempotent, multi-replica safe). Pair with [Reloader](/operations/email#auto-rolling-on-secret-change-reloader) for self-driving rotation. Set `false` to skip — see [Admin credential rotation](/operations/admin-credential-rotation). |
 | `replicaCount` | `1` | Deployment replicas (HPA optional) |
+| `revisionHistoryLimit` | `3` | Old ReplicaSets retained for `kubectl rollout undo`. Lower than the k8s default of 10 since `helm rollback` and image-tag-pinned re-deploys are the canonical rollback paths in this stack. Chart **v0.4.1+**. |
 | `ingress.enabled` / `httpRoute.enabled` | `false` / `false` | Pick one for external routing |
 | `mariadb.enabled` / `redis.enabled` / `minio.enabled` | `true` / `true` / `true` | Bundled subcharts (kind dev) |
 | `externalDatabase.host` | `""` | Used when `mariadb.enabled=false` |
