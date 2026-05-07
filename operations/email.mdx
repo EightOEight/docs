@@ -36,7 +36,31 @@ flowchart LR
   SiteHealth component adds a TCP-reachability test on the
   wp-admin → Site Health screen.
 
-## Quick start
+## Before you start: site image must include SMTPMailer
+
+The chart's `smtp.*` values are wiring — the actual SMTP send happens
+inside the WP runtime, in the
+[`SMTPMailer`](/components/fp-mu-plugin#smtpmailer) mu-plugin component.
+Flipping `smtp.enabled=true` against a site image that doesn't include
+`fp-mu-plugin >=0.5.0` is a no-op: the env vars get injected, no filter
+gets registered, `wp_mail()` keeps falling through to broken `mail()`.
+
+| If your site image is built from… | Action |
+|---|---|
+| `fp-site-template` (default) | Use **v0.2.4+**. Earlier tags don't include SMTPMailer. |
+| A fork of `fp-site-template` | Bump `eightoeight/fp-mu-plugin` in your `composer.json` to `^0.5.0`, run `composer update`, rebuild the site image, then point the chart at the new tag. |
+| A custom site image | Same — composer-install `eightoeight/fp-mu-plugin: ^0.5.0` somewhere on the autoloader path. |
+
+You can confirm SMTPMailer is present in a running pod:
+
+```bash
+kubectl -n mysite exec deploy/mysite-fp-site -- \
+  ls /app/web/app/mu-plugins/fp-mu-plugin/src/ | grep SMTPMailer
+```
+
+## Quick start (manual Secret)
+
+For a single-namespace test or a kind-cluster demo:
 
 ```bash
 # 1. Create a Secret with your provider's SMTP credentials.
@@ -53,6 +77,69 @@ helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
   --set smtp.fromName="Your Site Name" \
   --set smtp.auth.existingSecret=mysite-smtp
 ```
+
+## Production: ExternalSecret + ESO
+
+Real deployments don't keep credentials in `kubectl --from-literal` — they
+pull from a secret manager (AWS Secrets Manager, GCP Secret Manager,
+HashiCorp Vault, 1Password Connect, etc.) via [External Secrets
+Operator](https://external-secrets.io/). The chart doesn't care how
+`smtp.auth.existingSecret` got into the namespace, so any of those work.
+The ESO + AWS Secrets Manager recipe (with the API token stored at
+`my/asm/path` under field `smtp_token`) looks like:
+
+```yaml
+# secrets/postmark.yaml — synced by ArgoCD / Flux into your namespace
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: mysite-smtp
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: cluster-secret-store
+    kind: ClusterSecretStore
+  data:
+  - secretKey: token
+    remoteRef:
+      key: my/asm/path
+      property: smtp_token
+  target:
+    name: mysite-smtp
+    creationPolicy: Owner
+    template:
+      data:
+        # Postmark uses the same token for both SMTP fields. SES, Mailgun
+        # etc. would use distinct username/password — adapt accordingly.
+        username: "{{ .token }}"
+        password: "{{ .token }}"
+```
+
+Then in the chart values:
+
+```yaml
+smtp:
+  enabled: true
+  host: smtp.postmarkapp.com
+  fromEmail: hello@yourdomain.com
+  auth:
+    existingSecret: mysite-smtp
+```
+
+<Tip>
+  For multi-environment setups (`mysite-staging`, `mysite-production`),
+  use a separate provider Server / API token per env so a staging blast
+  doesn't burn your production sender reputation. We recommend distinct
+  ExternalSecrets pointing at distinct ASM keys
+  (`asm/path/staging`, `asm/path/production`) rather than one shared
+  Secret with Message Streams.
+</Tip>
+
+<Tip>
+  Add an env-suffix to `fromName` in your staging values
+  (e.g. `fromName: "MySite (staging)"`) so testing emails are
+  immediately obvious in inboxes.
+</Tip>
 
 ## Provider recipes
 
@@ -151,9 +238,11 @@ env is injected, and the mu-plugin sets `SMTPAuth = false`.
 | State | Behaviour |
 |---|---|
 | `smtp.enabled=false` (default) | No SMTP env injected. `wp_mail()` falls through to `mail()` → silent fail. The install Job suppresses the password-change-notification email on the `syncAdminCredentials` path so you don't see noisy `sendmail: not found` lines in Job logs. |
-| `smtp.enabled=true`, server reachable | Email delivers. `wp_mail()` returns `true`. SiteHealth test reports `good`. |
+| `smtp.enabled=true`, server reachable, auth + identity valid | Provider accepts the message. `wp_mail()` returns `true`. SiteHealth test reports `good`. **`true` is not the same as "delivered"** — see verification below. |
 | `smtp.enabled=true`, server unreachable | `wp_mail()` returns `false`. The failure is logged via `error_log` (visible in pod stderr / your log shipper). SiteHealth test reports `critical` with errno + message. **No retry**. |
 | `smtp.enabled=true`, auth invalid | Same as unreachable — log + `false` return. Auth failures only surface during the SMTP handshake, not on the SiteHealth TCP-reachability check. |
+| `smtp.enabled=true`, **sender identity unverified** (Postmark Sender Signature, SES verified identity, etc.) | TCP reachability passes, auth passes, the provider rejects with a 5xx during `MAIL FROM`. `wp_mail()` returns `false` and the SMTP response is logged. SiteHealth test stays **green** because TCP-reachability doesn't probe the handshake. **Most common first-time-setup failure** — verify the `fromEmail` identity in the provider dashboard before flipping `smtp.enabled=true`. |
+| Site image lacks `fp-mu-plugin >=0.5.0` | SMTP env vars get injected by the chart, but no `phpmailer_init` filter is registered inside WP, so `wp_mail()` keeps falling through to `mail()` and fails silently. SiteHealth's SMTP-reachability test isn't registered either — there's no signal that anything's wrong. See [Before you start](#before-you-start-site-image-must-include-smtpmailer). |
 
 ## What's not in the platform
 
@@ -183,7 +272,7 @@ kubectl -n mysite exec deploy/mysite-fp-site -- \
   wp --allow-root --path=/app/web/wp eval \
   'echo (has_action("phpmailer_init") ? "registered" : "missing") . "\n";'
 
-# 3. Send a test email.
+# 3. Send a test email — to an address you actually control.
 kubectl -n mysite exec deploy/mysite-fp-site -- \
   wp --allow-root --path=/app/web/wp eval \
   'var_export(wp_mail("you@example.com", "test", "hello"));'
@@ -191,6 +280,65 @@ kubectl -n mysite exec deploy/mysite-fp-site -- \
 # 4. Check Site Health (admin → Tools → Site Health).
 #    Look for "FrankenPress SMTP server reachable" — should be green.
 ```
+
+<Warning>
+  **`wp_mail()` returning `true` does not mean the email was delivered.**
+  It means PHPMailer's SMTP handshake completed and your provider
+  accepted the message — the message can still bounce, get filtered
+  to spam, fail content-policy checks, or never reach the recipient
+  at all. **Always cross-check by:**
+
+  1. Looking at the recipient inbox (and the spam folder).
+  2. Looking at the provider's Activity / Messages dashboard
+     (Postmark → Activity, SES → SMTP logs, Mailgun → Logs,
+     SendGrid → Activity Feed). The provider's own dashboard is the
+     authoritative "did the message actually leave" check.
+
+  If `wp_mail()` returns `false`, look at pod stderr — `SMTPMailer`
+  logs `[FrankenPress\\SMTPMailer]` errors with the SMTP response.
+  Most common first-time culprit is sender-identity rejection
+  (Postmark Sender Signature, SES verified identity, etc.).
+</Warning>
+
+## Operations
+
+### Token rotation
+
+When you rotate the API token in your provider's dashboard:
+
+1. Update the value at the source (your secret manager).
+2. ESO refreshes the K8s Secret on its `refreshInterval` (1 hour by
+   default). The Secret in the namespace will pick up the new value
+   transparently.
+3. **Running pods don't notice** — env vars were injected at pod start.
+   Roll the Deployment so new pods read the rotated value:
+
+   ```bash
+   kubectl -n mysite rollout restart deploy/mysite-fp-site
+   ```
+
+The wpcron CronJob and the post-install/post-upgrade Job each pull
+fresh env on every invocation, so they always use the latest token.
+Only the long-running Deployment needs the manual roll.
+
+### Sender-identity verification
+
+Most providers require you to prove ownership of the `fromEmail`
+address (or its domain) before they'll accept sends. Skipping this is
+the single most common first-deploy gotcha — the SMTP handshake
+succeeds, auth succeeds, but the provider rejects `MAIL FROM` with a
+5xx and `wp_mail()` returns `false`.
+
+| Provider | Where to verify |
+|---|---|
+| Postmark | Dashboard → Servers → (your Server) → Sender Signatures (per-address) or Domains (whole domain — recommended) |
+| SendGrid | Settings → Sender Authentication → Verify a Single Sender / Authenticate Your Domain |
+| Mailgun | Sending → Domains → (your domain) → DNS records |
+| AWS SES | Identities → Create identity (Domain or Email address) |
+
+Domain-level verification is preferred over per-address — one DNS
+config, all addresses on that domain become valid `fromEmail` values
+forever. Plus DKIM signing only works at the domain level.
 
 ## Related
 
