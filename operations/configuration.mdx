@@ -145,6 +145,7 @@ syncAdminCredentials: true      # initContainer on every Pod reconciles wp_users
                                 # — false to skip (e.g. external IdP owns the WP admin user)
 
 replicaCount: 1
+revisionHistoryLimit: 3         # old ReplicaSets retained for kubectl rollout undo (default 3, was k8s-default 10 pre-0.4.1)
 autoscaling:
   enabled: false                # set true + minReplicas/maxReplicas in prod
 
