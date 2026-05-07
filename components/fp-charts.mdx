@@ -31,11 +31,11 @@ topology](/operations/production).
 ```mermaid
 flowchart TD
     subgraph release["Per-release resources"]
-        deploy["<b>Deployment</b><br/>Caddy + FrankenPHP<br/>:8080 http, :9145 metrics"]
+        deploy["<b>Deployment</b><br/>Caddy + FrankenPHP<br/>:8080 http, :9145 metrics<br/><i>+ sync-admin-credentials initContainer</i>"]
         svc["<b>Service</b> (ClusterIP)"]
         ingress(["Ingress / HTTPRoute<br/>(opt-in)"])
         wpcron["<b>CronJob</b><br/>wp-cron (every 5 min)"]
-        installJob["<b>Job</b> (post-install + post-upgrade hooks)<br/>idempotent wp core install + update-db<br/>+ optional admin password sync"]
+        installJob["<b>Job</b> (post-install + post-upgrade hooks)<br/>idempotent wp core install + update-db"]
         keys["Secret: keys+salts<br/>(auto-generated)"]
         admin["Secret: admin install creds<br/>(auto-generated, or existingSecret)"]
     end
@@ -48,6 +48,7 @@ flowchart TD
 
     deploy --> svc --> ingress
     deploy -.reads.-> keys
+    deploy -.reads.-> admin
     deploy -.reads.-> mariadb
     deploy -.reads.-> redis
     deploy -.reads.-> minio
@@ -59,9 +60,12 @@ flowchart TD
 ```
 
 The install Job is new in chart **v0.2.0** — fresh deploys produce a
-usable site without manual `kubectl exec ... wp core install`. See
-[First install](#first-install) below for credentials and the
-`syncAdminCredentials` rotation flow.
+usable site without manual `kubectl exec ... wp core install`. The
+`sync-admin-credentials` initContainer (chart **v0.4.0+**) reconciles
+`wp_users` from the install Secret on every Pod start. See
+[First install](#first-install) for credentials and
+[Operations → Admin credential rotation](/operations/admin-credential-rotation)
+for the rotation flow.
 
 ## Subchart dependencies
 
@@ -96,7 +100,7 @@ the most-used keys:
 | `siteInstall.enabled` | `true` | Off → skip auto `wp core install` (use for DB-restore deploys) |
 | `siteInstall.adminUser` | `admin` | Auto-generated path |
 | `siteInstall.existingSecret` | `""` | BYO Secret (key names configurable) |
-| `siteInstall.syncAdminCredentials` | `false` | Reconcile wp_users from Secret on every upgrade |
+| `syncAdminCredentials` | `true` | InitContainer that reconciles wp_users from the install Secret on every Pod start (idempotent, multi-replica safe). Pair with [Reloader](/operations/email#auto-rolling-on-secret-change-reloader) for self-driving rotation. Set `false` to skip — see [Admin credential rotation](/operations/admin-credential-rotation). |
 | `replicaCount` | `1` | Deployment replicas (HPA optional) |
 | `ingress.enabled` / `httpRoute.enabled` | `false` / `false` | Pick one for external routing |
 | `mariadb.enabled` / `redis.enabled` / `minio.enabled` | `true` / `true` / `true` | Bundled subcharts (kind dev) |
@@ -176,25 +180,46 @@ siteInstall:
 ### Password rotation
 
 WordPress stores a *hash* of the admin password in `wp_users`, so simply
-updating the Secret value won't change the live login. Set
-`siteInstall.syncAdminCredentials: true` and the post-upgrade Job will
-run `wp user update` to push the Secret value into the DB on every
-release:
+updating the Secret value won't change the live login. The chart's
+`sync-admin-credentials` initContainer (default on) handles this on
+every Pod start — pair it with
+[Stakater Reloader](/operations/email#auto-rolling-on-secret-change-reloader)
+so the Pod actually rolls when the Secret changes:
 
 ```yaml
-siteInstall:
-  existingSecret: mysite-admin
-  syncAdminCredentials: true
+# values.yaml
+syncAdminCredentials: true   # default — initContainer on every site Pod
+
+commonAnnotations:
+  # Reloader watches the install Secret and rolls the Deployment when
+  # admin_password / admin_email change. commonAnnotations lands on
+  # the Deployment's metadata.annotations (where Reloader looks);
+  # podAnnotations lands on the pod-template (which Reloader ignores).
+  secret.reloader.stakater.com/reload: "<release>-fp-site-install"
 ```
 
-Then any time the Secret value changes (manual edit, ESO sync, sealed
-secret rotation), trigger a `helm upgrade` and the Job reconciles
-`wp_users` to match.
+Once that's wired, the full flow is automatic:
+
+```
+secret manager → ESO → install Secret bumps →
+  Reloader rolls Deployment → initContainer detects drift →
+    wp user update → wp_users caught up to Secret
+```
+
+Idempotent and multi-replica safe — only the first Pod to roll runs
+`wp user update`; subsequent Pods see the DB in sync and short-circuit.
+One DB write, one WP "Password Changed" notification per rotation,
+regardless of replica count.
+
+Full setup, verification, failure modes, and the
+`syncAdminCredentials: false` opt-out are in
+[Operations → Admin credential rotation](/operations/admin-credential-rotation).
 
 The **database password** rotates differently — the Deployment, wpcron
 CronJob, and install Job all read `DB_PASSWORD` from `secretKeyRef`, so
 when the Secret value changes, restarting pods picks up the new value
-automatically. No chart-side reconciliation needed.
+automatically. No chart-side reconciliation needed (and Reloader handles
+the restart trigger).
 
 ### Skipping install
 

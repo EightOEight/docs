@@ -39,6 +39,7 @@
               "operations/configuration",
               "operations/runtime-matrix",
               "operations/upgrade",
+              "operations/admin-credential-rotation",
               "operations/logging",
               "operations/email",
               "operations/troubleshooting"
