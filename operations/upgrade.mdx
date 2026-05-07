@@ -60,16 +60,18 @@ The chart re-rolls the Deployment, draining old pods according to your
 
 Every `helm upgrade` (and the initial `helm install`) fires a
 post-upgrade hook Job named `<release>-fp-site-install`. The Job
-runs three things, all idempotent:
+runs two things, both idempotent:
 
 1. `wp core is-installed` — short-circuits the install branch on every
    upgrade after the first.
 2. `wp core update-db` — applies any pending schema migrations from
    the WP core version baked into the new image. No-op if already
    current.
-3. `wp user update <admin>` — only if `siteInstall.syncAdminCredentials: true`.
-   Reads the admin Secret and reconciles `wp_users` so an
-   externally-rotated password takes effect on the next release.
+
+Admin credential reconciliation moved out of the install Job in chart
+**v0.4.0** to a Pod-lifecycle `sync-admin-credentials` initContainer —
+self-driving on every Pod roll, not gated on `helm upgrade`. See
+[Admin credential rotation](/operations/admin-credential-rotation).
 
 Watch a single upgrade's Job complete:
 

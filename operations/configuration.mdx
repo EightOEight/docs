@@ -139,8 +139,10 @@ siteInstall:                    # post-install/post-upgrade `wp core install` + 
   existingSecretAdminUserKey: "admin_user"
   existingSecretAdminEmailKey: "admin_email"
   existingSecretAdminPasswordKey: "admin_password"
-  syncAdminCredentials: false   # true → reconcile wp_users from Secret on every upgrade
   skipEmail: true               # pass --skip-email to wp core install
+
+syncAdminCredentials: true      # initContainer on every Pod reconciles wp_users from the install Secret
+                                # — false to skip (e.g. external IdP owns the WP admin user)
 
 replicaCount: 1
 autoscaling:
@@ -222,20 +224,22 @@ in the Secret.
 ### WordPress admin password
 
 WordPress stores a *hash* of the admin password in `wp_users`, so simply
-updating the Secret value won't change the live login. Set
-`siteInstall.syncAdminCredentials: true` and the post-upgrade install
-Job runs `wp user update` to push the Secret value into the DB on every
-release:
+updating the Secret value won't change the live login. The chart's
+`sync-admin-credentials` initContainer (default on, chart **v0.4.0+**)
+reconciles `wp_users` against the install Secret on every Pod start.
+Pair it with [Reloader](/operations/email#auto-rolling-on-secret-change-reloader)
+and rotation is self-driving:
 
 ```bash
-# 1. Whatever rotates your Secret updates the value:
-kubectl patch secret mysite-admin -p '{"stringData":{"admin_password":"new-value"}}'
+# Whatever rotates your Secret updates the value:
+kubectl patch secret mysite-fp-site-install \
+  -p '{"stringData":{"admin_password":"new-value"}}'
 
-# 2. Trigger the post-upgrade Job:
-helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site --reuse-values
+# Reloader rolls the Deployment → initContainer detects drift →
+# wp user update → DB caught up to Secret. No helm upgrade needed.
 ```
 
-Default is `false` so a one-time install with a known password doesn't
-have post-upgrade runs silently overwriting a password the user changed
-via wp-admin. Enable it explicitly when the Secret is the source of
-truth.
+Set `syncAdminCredentials: false` to skip the initContainer (e.g. when
+an external IdP owns the WP admin user, or when you treat wp-admin as
+the canonical credential store). Full flow, verification, and failure
+modes are in [Admin credential rotation](/operations/admin-credential-rotation).

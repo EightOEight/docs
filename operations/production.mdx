@@ -251,7 +251,10 @@ your secret manager, then:
 ```yaml
 siteInstall:
   existingSecret: mysite-admin                    # ESO-synced
-  syncAdminCredentials: true                      # reconcile wp_users on every helm upgrade
+
+syncAdminCredentials: true                        # default — initContainer reconciles wp_users on every Pod start
+                                                  # pair with Reloader for self-driving rotation:
+                                                  # /operations/admin-credential-rotation
 ```
 
 ### Other Secrets
