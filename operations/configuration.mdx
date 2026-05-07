@@ -210,6 +210,11 @@ chart-side reconciliation is required.
 kubectl rollout restart deployment/mysite-fp-site
 ```
 
+Or wire up [Stakater Reloader](/operations/email#auto-rolling-on-secret-change-reloader)
+once cluster-wide and skip the manual restart for every Secret rotation
+on the platform — the database password, WP keys+salts, S3 credentials,
+and the SMTP token all benefit.
+
 Rotating the password on the DB server itself is the DB's lifecycle
 (mariadb-operator, RDS rotation, etc.) — the chart consumes whatever's
 in the Secret.
