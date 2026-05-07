@@ -128,6 +128,13 @@ replicaCount: 1
 autoscaling:
   enabled: false                # set true + minReplicas/maxReplicas in prod
 
+serviceMonitor:                 # prometheus-operator integration (optional)
+  enabled: false                # self-gates on the monitoring.coreos.com/v1 CRD
+  namespace: ""                 # defaults to release namespace
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}                    # match your Prometheus's serviceMonitorSelector
+
 ingress:
   enabled: false                # pick this OR httpRoute
 httpRoute:

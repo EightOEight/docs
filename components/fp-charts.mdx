@@ -105,6 +105,7 @@ the most-used keys:
 | `externalS3.bucket` | `site-media` | Used when `minio.enabled=false` |
 | `wpCron.enabled` | `true` | Run a CronJob that fires `wp cron event run --due-now`. When true, the chart also sets `DISABLE_WP_CRON=true` on the site so WP's in-process pseudo-cron doesn't fire alongside it (the two settings are coupled). Disable to fall back to WP's request-triggered cron. |
 | `wpCron.schedule` | `*/5 * * * *` | wp-cron CronJob frequency |
+| `serviceMonitor.enabled` | `false` | Render a prometheus-operator `ServiceMonitor` for the `:9145/metrics` endpoint. Self-gates on the `monitoring.coreos.com/v1` CRD — leaving on for clusters without it is safe (renders nothing). Set `serviceMonitor.labels` to whatever your Prometheus's `serviceMonitorSelector` expects. |
 | `tmpfsSize.tmp` / `data` / `config` | `256Mi` / `64Mi` / `16Mi` | tmpfs sizes for the read-only-root pod |
 
 A condensed reference is at [Operations → Configuration](/operations/configuration).
