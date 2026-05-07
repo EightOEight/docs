@@ -321,6 +321,51 @@ The wpcron CronJob and the post-install/post-upgrade Job each pull
 fresh env on every invocation, so they always use the latest token.
 Only the long-running Deployment needs the manual roll.
 
+### Auto-rolling on Secret change (Reloader)
+
+If you rotate often (or just don't want a manual `kubectl rollout
+restart` in your runbook), install
+[**Stakater Reloader**](https://github.com/stakater/Reloader) cluster-wide.
+It watches `Secret` and `ConfigMap` objects and triggers a rolling
+update on associated workloads when their content changes — closing
+the gap between "ESO refreshed the Secret" and "running pods see the
+new value".
+
+Install via the Helm chart on Artifact Hub:
+
+```bash
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm install reloader stakater/reloader -n reloader --create-namespace
+```
+
+Then opt the fp-site workload into auto-reloads in your values:
+
+```yaml
+podAnnotations:
+  # Watch every Secret + ConfigMap referenced by this Deployment.
+  # When any of them change, Reloader does a rolling restart.
+  reloader.stakater.com/auto: "true"
+```
+
+Or — more conservative — pin specific Secrets:
+
+```yaml
+podAnnotations:
+  # Only restart on changes to these named Secrets.
+  secret.reloader.stakater.com/reload: "mysite-smtp,fp-site-keys,mysite-db-credentials"
+```
+
+<Note>
+  Reloader is platform-wide infrastructure, not SMTP-specific. Once
+  installed it solves the same "manual rollout-restart" problem for
+  every Secret the chart references — the database password, the
+  WP keys+salts, S3 credentials, and the SMTP token. Worth installing
+  once for the whole platform if any of those rotate on a schedule.
+</Note>
+
+The wpcron CronJob and install Job don't need Reloader — they're
+short-lived and pull fresh env on every invocation.
+
 ### Sender-identity verification
 
 Most providers require you to prove ownership of the `fromEmail`
