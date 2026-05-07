@@ -338,10 +338,13 @@ helm repo add stakater https://stakater.github.io/stakater-charts
 helm install reloader stakater/reloader -n reloader --create-namespace
 ```
 
-Then opt the fp-site workload into auto-reloads in your values:
+Then opt the fp-site workload into auto-reloads in your values. Use
+`commonAnnotations`, **not** `podAnnotations` — Reloader watches the
+Deployment object's `metadata.annotations`, not the pod-template's
+`spec.template.metadata.annotations`:
 
 ```yaml
-podAnnotations:
+commonAnnotations:
   # Watch every Secret + ConfigMap referenced by this Deployment.
   # When any of them change, Reloader does a rolling restart.
   reloader.stakater.com/auto: "true"
@@ -350,10 +353,19 @@ podAnnotations:
 Or — more conservative — pin specific Secrets:
 
 ```yaml
-podAnnotations:
+commonAnnotations:
   # Only restart on changes to these named Secrets.
   secret.reloader.stakater.com/reload: "mysite-smtp,fp-site-keys,mysite-db-credentials"
 ```
+
+<Note>
+  `commonAnnotations` is applied to every resource the chart renders
+  (Service, ConfigMap, Secret, Job, CronJob, ServiceMonitor, etc.), not
+  only the Deployment. The Reloader annotations on non-workload resources
+  are harmless — Reloader only acts on Deployments, StatefulSets, and
+  DaemonSets — but they will be visible if you `kubectl describe` other
+  objects.
+</Note>
 
 <Note>
   Reloader is platform-wide infrastructure, not SMTP-specific. Once
