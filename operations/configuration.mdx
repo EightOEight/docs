@@ -73,6 +73,24 @@ are FrankenPress-specific — they're standard WordPress config.
 | `FORCE_SSL_ADMIN` | `true` | Force SSL for admin (the chart sets X-Forwarded-Proto pass-through) |
 | `DISABLE_WP_CRON` | `false` | Disable WP's in-process pseudo-cron. The Helm chart sets this to `true` automatically when `wpCron.enabled` is on, so the CronJob is the only driver. Sites built from `fp-site-template` v0.2.3+ honour this; older images ignore it. |
 
+## fp-mu-plugin: SMTPMailer
+
+| Var | Default | Required | Notes |
+|---|---|---|---|
+| `FP_SMTP_HOST` | (unset) | yes (when opting in) | SMTP server hostname. Component is a no-op when unset. |
+| `FP_SMTP_PORT` | `587` | | TCP port |
+| `FP_SMTP_ENCRYPTION` | `tls` | | `tls` (STARTTLS), `ssl` (implicit TLS), `none` (local dev only) |
+| `FP_SMTP_USERNAME` | (unset) | yes (when opting in) | SMTP auth username |
+| `FP_SMTP_PASSWORD` | (unset) | yes (when opting in) | SMTP auth password |
+| `FP_SMTP_FROM_EMAIL` | (WP `admin_email`) | | `wp_mail_from` filter target |
+| `FP_SMTP_FROM_NAME` | (WP `blogname`) | | `wp_mail_from_name` filter target |
+| `FP_SMTP_DISABLED` | `false` | | Truthy → mu-plugin bootstrap is a no-op. **Local-dev only**; the Helm chart never sets this. |
+
+When `FP_SMTP_HOST` is unset, `wp_mail()` falls through to PHP's
+`mail()` and fails silently because fp-runtime ships no MTA. The chart
+sets `smtp.enabled=true` to wire the env above; see
+[Operations → Email](/operations/email) for provider recipes.
+
 ## Build args (fp-runtime)
 
 Set at image build time with `--build-arg`:
@@ -134,6 +152,18 @@ serviceMonitor:                 # prometheus-operator integration (optional)
   interval: 30s
   scrapeTimeout: 10s
   labels: {}                    # match your Prometheus's serviceMonitorSelector
+
+smtp:                           # email delivery via SMTP (optional)
+  enabled: false                # opt-in
+  host: ""                      # e.g. smtp.postmarkapp.com
+  port: 587                     # 587 STARTTLS, 465 implicit TLS
+  encryption: tls               # tls | ssl | "" (none)
+  fromEmail: ""                 # default: WP admin_email
+  fromName: ""                  # default: WP blogname
+  auth:
+    existingSecret: ""          # required when SMTP server needs auth
+    usernameKey: username
+    passwordKey: password
 
 ingress:
   enabled: false                # pick this OR httpRoute

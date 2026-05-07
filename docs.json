@@ -40,6 +40,7 @@
               "operations/runtime-matrix",
               "operations/upgrade",
               "operations/logging",
+              "operations/email",
               "operations/troubleshooting"
             ]
           }

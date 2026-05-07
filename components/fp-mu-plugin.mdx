@@ -1,20 +1,22 @@
 ---
 title: "fp-mu-plugin"
-description: "Slim WordPress must-use plugin: S3 uploads bootstrap + Souin cache invalidator"
+description: "Slim WordPress must-use plugin: S3 uploads, Souin invalidation, Site Health, SMTP"
 icon: "puzzle-piece"
 ---
 
 [`fp-mu-plugin`](https://github.com/EightOEight/fp-mu-plugin) is the
-WordPress-side glue for the FrankenPress stack. Two components only —
-anything else (URL fixers, object cache, metrics, WC log handlers) is
-considered **optional** and is the consumer site's responsibility.
+WordPress-side glue for the FrankenPress stack. Four components, all
+platform-housekeeping — anything else (URL fixers, object cache, metrics,
+WC log handlers) is **optional** and is the consumer site's responsibility.
 
 | Component | What it does |
 |---|---|
 | [**S3UploadsBootstrap**](#s3uploadsbootstrap) | Configures [`humanmade/s3-uploads`](https://github.com/humanmade/S3-Uploads) from `FP_S3_*` env vars. **Refuses uploads** when S3 isn't fully configured (no silent local-disk fallback). |
 | [**SouinInvalidator**](#souininvalidator) | `DEL`s Souin's Redis cache entries directly on `save_post`, `clean_post_cache`, `switch_theme`, etc. — bypasses cache-handler's broken HTTP invalidation. |
+| [**SiteHealth**](#sitehealth) | Suppresses the Site Health tests whose failure is intentional under the immutable-image lockdown (`background_updates`, FS-write probes, `plugin_theme_auto_updates`) and adds a passing FrankenPress-branded test that explains why. Also adds an SMTP-reachability test when SMTPMailer is configured. |
+| [**SMTPMailer**](#smtpmailer) | Wires the global PHPMailer to send via SMTP from `FP_SMTP_*` env vars. The fp-runtime image ships no MTA, so without this every `wp_mail()` call fails silently. Transport-agnostic (Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay). Opt-in: no-op when `FP_SMTP_HOST` is unset. |
 
-Composer name: `eightoeight/fp-mu-plugin`. Latest release: `v0.2.0`.
+Composer name: `eightoeight/fp-mu-plugin`. Latest release: `v0.5.0`.
 
 ## S3UploadsBootstrap
 
@@ -106,6 +108,66 @@ If `ext-redis` isn't loaded, or the connection fails, or
 `FP_SOUIN_DISABLED` is set, the invalidator is a **silent no-op**.
 Errors are logged via `error_log` but never raised — a broken cache
 layer must not break WordPress itself.
+
+## SiteHealth
+
+Tweaks WordPress's Site Health screen so it reports signal, not noise,
+on a FrankenPress site. Removes the four lockdown-related tests
+(`background_updates`, `update_temp_backup_writable`,
+`available_updates_disk_space`, `plugin_theme_auto_updates`) — their
+failure is correct behaviour under the immutable-image lockdown — and
+adds a passing FrankenPress-branded test that explains the lockdown
+to anyone reading the dashboard.
+
+When `FP_SMTP_HOST` is set (i.e. SMTPMailer has been opted into), this
+component also registers a `frankenpress_smtp_reachability` Site Health
+test that does a 2-second TCP connect to the configured SMTP server.
+Failure produces a `critical` red badge on the wp-admin Site Health
+screen — the canonical "is my email actually working" check.
+
+## SMTPMailer
+
+Reads `FP_SMTP_*` environment variables and hooks `phpmailer_init` to
+override the global PHPMailer instance with SMTP. Transport-agnostic —
+the same env contract works for Postmark, SendGrid, Mailgun, AWS SES,
+or any in-cluster relay (mailpit, mailhog, postfix-relay).
+
+For end-to-end recipes, see [Operations → Email](/operations/email).
+
+### Env vars
+
+| Var | Default | Purpose |
+|---|---|---|
+| `FP_SMTP_HOST` | (unset) | SMTP hostname (e.g. `smtp.postmarkapp.com`). Component is a no-op when unset. |
+| `FP_SMTP_PORT` | `587` | TCP port |
+| `FP_SMTP_ENCRYPTION` | `tls` | `tls` (STARTTLS), `ssl` (implicit TLS), `none` (local dev only) |
+| `FP_SMTP_USERNAME` | (unset) | SMTP auth username |
+| `FP_SMTP_PASSWORD` | (unset) | SMTP auth password |
+| `FP_SMTP_FROM_EMAIL` | (WP `admin_email`) | `wp_mail_from` filter target |
+| `FP_SMTP_FROM_NAME` | (WP `blogname`) | `wp_mail_from_name` filter target |
+| `FP_SMTP_DISABLED` | `false` | Truthy → bootstrap is a no-op. **Local-dev escape hatch only.** The Helm chart never sets this; chart-side `smtp.enabled: false` covers the same need by simply not injecting the env. |
+
+### Failure mode
+
+If `FP_SMTP_HOST` is unset, the component is a silent no-op and
+`wp_mail()` falls through to PHP's `mail()` — which fails on the
+fp-runtime image because no MTA is shipped. That's the intentional
+default for sites that haven't opted into SMTP yet.
+
+When the host is set but unreachable / auth fails, `wp_mail()` returns
+`false` and the failure is logged via `error_log`. The component
+**never retries, queues, or falls back to `mail()`** — surfacing the
+failure beats hiding it. The SiteHealth `frankenpress_smtp_reachability`
+test surfaces the same failure on the Site Health dashboard.
+
+### Plugin coexistence
+
+A site that composer-installs a competing SMTP plugin (WP Mail SMTP,
+FluentSMTP, the official Postmark plugin) overrides SMTPMailer's
+config — those plugins run as regular plugins after must-use plugins
+and re-hook `phpmailer_init` at the same priority. Last-writer wins.
+Correct behaviour: the user opted into the plugin explicitly; we don't
+fight them.
 
 ## Install
 
