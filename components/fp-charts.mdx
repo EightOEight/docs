@@ -16,7 +16,7 @@ The chart is published as an OCI artifact on GHCR:
 
 ```bash
 helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-  --version 0.4.1 \
+  --version 0.5.0 \
   --namespace mysite --create-namespace
 ```
 
@@ -294,4 +294,4 @@ keysSalts:
 ## CI / publishing
 
 - **`lint.yml`** — `helm lint` + `helm template` + `chart-testing ct lint` on every push and PR.
-- **`release.yml`** — on push to main, `helm package` + push to `oci://ghcr.io/eightoeight/charts/fp-site`. Plus `chart-releaser-action` as a github-release fallback.
+- **`release.yml`** — on `v*.*.*` tag push, `helm package` + push to `oci://ghcr.io/eightoeight/charts/fp-site:<version>`. Tag-driven, never push-to-main-driven, so `Chart.yaml` `version` and the git tag move together. OCI is the canonical channel — no `gh-pages` fallback.

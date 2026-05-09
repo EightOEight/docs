@@ -11,7 +11,7 @@ flowchart TD
     charts["<b>fp-charts</b><br/>Helm chart"]
     template["<b>fp-site-template</b><br/>Bedrock-layout WP site<br/>(builds immutable image)"]
     runtime["<b>fp-runtime</b><br/>Caddy + FrankenPHP + Souin<br/>base container"]
-    mu["<b>fp-mu-plugin</b><br/>S3UploadsBootstrap + SouinInvalidator"]
+    mu["<b>fp-mu-plugin</b><br/>S3UploadsBootstrap + SouinInvalidator<br/>SiteHealth + SMTPMailer"]
 
     charts -->|deploys| template
     template -->|FROM| runtime
@@ -27,8 +27,9 @@ flowchart TD
     `ghcr.io/eightoeight/fp-runtime:php8.3`.
   </Card>
   <Card title="fp-mu-plugin" icon="puzzle-piece" href="/components/fp-mu-plugin">
-    Slim must-use plugin: S3 uploads bootstrap + Souin cache invalidator.
-    Composer-installable; baked into `fp-runtime` by default.
+    Slim must-use plugin (4 components): S3 uploads bootstrap, Souin cache
+    invalidator, Site Health overrides, opt-in SMTP mailer. Composer-installable;
+    baked into `fp-runtime` by default.
   </Card>
   <Card title="fp-site-template" icon="file-code" href="/components/fp-site-template">
     GitHub template repo. Bedrock layout; composer.json with sensible

@@ -24,7 +24,7 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     - **`kind`** + **`kubectl`** + **`helm`** ≥ v3.8 — only needed for the cluster step
   </Accordion>
   <Accordion title="What gets created on your account" icon="github">
-    - A new repo at `github.com/<your-account>/<your-site>` (public by default — flip to private if you prefer; cluster pulls then need an image pull secret)
+    - A new repo at `github.com/<your-account>/<your-site>` (public by default — flip to private if you prefer; cluster-side pulls of a private GHCR package need credentials, e.g. node-level containerd auth on Talos or a per-namespace `imagePullSecret`)
     - A GHCR package at `ghcr.io/<your-account>/<your-site>` — built and tagged automatically by CI
   </Accordion>
 </AccordionGroup>
@@ -188,7 +188,7 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     kubectl config use-context kind-myfp
 
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-      --version 0.4.1 \
+      --version 0.5.0 \
       --namespace mysite --create-namespace \
       --set image.repository=ghcr.io/<owner>/mysite \
       --set image.tag=v0.1.0 \

@@ -33,13 +33,18 @@ chart that deploys on `kind` in under a minute.
     (Souin) for HTTP-level page caching with Redis-protocol storage.
   </Step>
   <Step title="Slim must-use plugin">
-    Two components only:
+    Four components, all platform-housekeeping:
     [`S3UploadsBootstrap`](/components/fp-mu-plugin#s3uploadsbootstrap)
     (refuses uploads when S3 isn't fully configured — no silent local-disk
-    fallback) and
+    fallback),
     [`SouinInvalidator`](/components/fp-mu-plugin#souininvalidator)
     (direct Redis `DEL` on `save_post` — bypasses cache-handler v0.16.0's
-    broken HTTP invalidation APIs).
+    broken HTTP invalidation APIs),
+    [`SiteHealth`](/components/fp-mu-plugin#sitehealth)
+    (suppresses Site Health tests whose failure is intentional under the
+    immutable-image lockdown), and opt-in
+    [`SMTPMailer`](/components/fp-mu-plugin#smtpmailer)
+    (transport-agnostic SMTP for `wp_mail()` — Postmark, SendGrid, SES, etc.).
   </Step>
   <Step title="GitHub-template site">
     [`fp-site-template`](https://github.com/EightOEight/fp-site-template)

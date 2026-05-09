@@ -47,7 +47,7 @@ template repo unchanged — no fork required for the smoke test.
 
     ```bash
     helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
-      --version 0.4.1 \
+      --version 0.5.0 \
       --namespace mysite --create-namespace \
       --set site.url=http://localhost:8080 \
       --wait --timeout=10m
@@ -74,7 +74,7 @@ template repo unchanged — no fork required for the smoke test.
 
     <Tip>
       The default `image.repository` points at the demo site image
-      `ghcr.io/eightoeight/fp-site-template:0.1.0`. To deploy your own
+      `ghcr.io/eightoeight/fp-site-template` at the chart's `appVersion` tag. To deploy your own
       site, fork [`fp-site-template`](https://github.com/EightOEight/fp-site-template),
       push a `v*.*.*` tag (CI builds + pushes to your GHCR), then add
       `--set image.repository=ghcr.io/<your-org>/<your-site>,image.tag=v1.0.0`.
