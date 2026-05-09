@@ -333,22 +333,18 @@ externalS3:
 keysSalts:
   autoGenerate: false
   existingSecret: mysite-wp-keys                    # ESO syncs from your secret manager
-
-# --- defence-in-depth ---
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 33
-  fsGroup: 33
-
-containerSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 33
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  capabilities:
-    drop:
-      - ALL
 ```
+
+The chart's defaults already satisfy PodSecurity Standard `restricted:latest` —
+`runAsNonRoot: true`, `runAsUser: 33`, `fsGroup: 33`, `seccompProfile.type:
+RuntimeDefault` at the pod level; `allowPrivilegeEscalation: false`,
+`readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]` per container — so
+production overrides above don't need to repeat them. If you build a custom
+`fp-runtime` that re-adds the `cap_net_bind_service` file capability, override
+`containerSecurityContext.allowPrivilegeEscalation: true` and
+`containerSecurityContext.capabilities.add: [NET_BIND_SERVICE]` (the kernel's
+`no_new_privs` flag would otherwise refuse to exec the binary). The published
+runtime strips the cap, so this only matters for forked images.
 
 Install:
 
