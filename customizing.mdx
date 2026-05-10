@@ -426,13 +426,20 @@ different theme first.
     `image` matches the tag you bumped to in GitOps.
   </Accordion>
 
-  <Accordion title="Premium / non-WordPress.org plugins" icon="lock">
-    Sites with paid or self-hosted plugins use a custom Composer
-    repository entry in `composer.json` — typically a private VCS
-    repo or a [Satis](https://composer.github.io/satis/) /
-    [Composer Asset Server](https://composer-asset-server.com/)
-    instance. Out of scope here; see the
-    [Roots Bedrock Composer guide](https://roots.io/bedrock/docs/composer/).
+  <Accordion title="Premium / non-WordPress.org themes (and plugins)" icon="lock">
+    Premium themes and plugins (ThemeForest, Envato, self-hosted)
+    aren't on Composer registries and routinely ship admin-side
+    actions (demo importers, in-WP updaters, plugin bundlers) that
+    collide with the FrankenPress lockdown. The full recipe —
+    install via commit-direct, auto-activate via the chart, harden
+    wp-admin against click-ops, promote staging → production —
+    lives in [Premium themes](/premium-themes), with The7 as the
+    worked example end-to-end.
+
+    The Composer-only path (private VCS / Satis / Packagist Server)
+    also works if you have an existing private registry; see the
+    [Roots Bedrock Composer guide](https://roots.io/bedrock/docs/composer/)
+    for that pattern.
   </Accordion>
 </AccordionGroup>
 
