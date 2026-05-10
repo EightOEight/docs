@@ -11,10 +11,10 @@ from this repo's main branch.
 
 | Repo | Purpose |
 |---|---|
-| [`fp-runtime`](https://github.com/frankenpress/runtime) | Caddy + FrankenPHP + Souin base container image |
-| [`fp-mu-plugin`](https://github.com/frankenpress/mu-plugin) | Slim must-use plugin (S3 uploads bootstrap + Souin invalidator) |
-| [`fp-site-template`](https://github.com/frankenpress/site-template) | GitHub template for new sites |
-| [`fp-charts`](https://github.com/frankenpress/charts) | Helm chart for Kubernetes deployment |
+| [`runtime`](https://github.com/frankenpress/runtime) | Caddy + FrankenPHP + Souin base container image |
+| [`mu-plugin`](https://github.com/frankenpress/mu-plugin) | Slim must-use plugin (S3 uploads bootstrap + Souin invalidator) |
+| [`site-template`](https://github.com/frankenpress/site-template) | GitHub template for new sites |
+| [`charts`](https://github.com/frankenpress/charts) | Helm chart for Kubernetes deployment |
 
 ## Local preview
 

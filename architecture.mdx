@@ -1,6 +1,6 @@
 ---
 title: "Architecture"
-description: "How the four fp-* repos fit together"
+description: "How the four * repos fit together"
 icon: "diagram-project"
 ---
 
@@ -8,10 +8,10 @@ FrankenPress is four repos that compose into one WordPress deployment:
 
 ```mermaid
 flowchart TD
-    charts["<b>fp-charts</b><br/>Helm chart"]
-    template["<b>fp-site-template</b><br/>Bedrock-layout WP site<br/>(builds immutable image)"]
-    runtime["<b>fp-runtime</b><br/>Caddy + FrankenPHP + Souin<br/>base container"]
-    mu["<b>fp-mu-plugin</b><br/>S3UploadsBootstrap + SouinInvalidator<br/>SiteHealth + SMTPMailer"]
+    charts["<b>charts</b><br/>Helm chart"]
+    template["<b>site-template</b><br/>Bedrock-layout WP site<br/>(builds immutable image)"]
+    runtime["<b>runtime</b><br/>Caddy + FrankenPHP + Souin<br/>base container"]
+    mu["<b>mu-plugin</b><br/>S3UploadsBootstrap + SouinInvalidator<br/>SiteHealth + SMTPMailer"]
 
     charts -->|deploys| template
     template -->|FROM| runtime
@@ -22,20 +22,20 @@ flowchart TD
 ## The four repos
 
 <CardGroup cols={2}>
-  <Card title="fp-runtime" icon="cube" href="/components/fp-runtime">
+  <Card title="runtime" icon="cube" href="/components/runtime">
     Container image: Caddy + FrankenPHP + Souin compiled in. Published as
     `ghcr.io/frankenpress/runtime:php8.3`.
   </Card>
-  <Card title="fp-mu-plugin" icon="puzzle-piece" href="/components/fp-mu-plugin">
+  <Card title="mu-plugin" icon="puzzle-piece" href="/components/mu-plugin">
     Slim must-use plugin (4 components): S3 uploads bootstrap, Souin cache
     invalidator, Site Health overrides, opt-in SMTP mailer. Composer-installable;
-    baked into `fp-runtime` by default.
+    baked into `runtime` by default.
   </Card>
-  <Card title="fp-site-template" icon="file-code" href="/components/fp-site-template">
+  <Card title="site-template" icon="file-code" href="/components/site-template">
     GitHub template repo. Bedrock layout; composer.json with sensible
     minimal deps. Builds your site image on `git push --tags`.
   </Card>
-  <Card title="fp-charts" icon="ship" href="/components/fp-charts">
+  <Card title="charts" icon="ship" href="/components/charts">
     Helm chart `site`. Bitnami-style; bundles MariaDB + Redis + MinIO
     for instant `kind` deploys.
   </Card>
@@ -49,7 +49,7 @@ flowchart LR
     caddy["Caddy"]
     souin{{"Souin<br/>HTTP cache"}}
     fphp["FrankenPHP worker<br/>(loads WP in-process,<br/>no PHP-FPM)"]
-    mu["fp-mu-plugin"]
+    mu["mu-plugin"]
     s3[(S3)]
     redis[(Redis)]
 
@@ -72,7 +72,7 @@ for the investigation).
 
 ```mermaid
 flowchart LR
-    tag["git tag v1.0.0<br/>(in fp-site-template fork)"]
+    tag["git tag v1.0.0<br/>(in site-template fork)"]
     ci["GHA build.yml<br/>composer install →<br/>docker build →<br/>push to GHCR"]
     ghcr[("ghcr.io/owner/site:v1.0.0")]
     helm["helm upgrade<br/>--set image.tag=v1.0.0"]
@@ -93,7 +93,7 @@ with whatever orchestration they prefer.
 
 ## What stays out
 
-- **No WooCommerce / Yoast / theme picks** in `fp-site-template`. Add what you need via `composer require wpackagist-plugin/<slug>`.
+- **No WooCommerce / Yoast / theme picks** in `site-template`. Add what you need via `composer require wpackagist-plugin/<slug>`.
 - **No GitOps controller**. The chart renders k8s primitives; you bring your own Argo CD / Flux / Kargo.
 - **No multi-cluster federation**. One namespace = one site (use multiple Helm releases for multiple sites in one cluster).
 - **No admin-installable plugins/themes/core updates**. The image is the source of truth; the lockdown is hard-coded.

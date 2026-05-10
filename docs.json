@@ -26,10 +26,10 @@
           {
             "group": "Components",
             "pages": [
-              "components/fp-runtime",
-              "components/fp-mu-plugin",
-              "components/fp-site-template",
-              "components/fp-charts"
+              "components/runtime",
+              "components/mu-plugin",
+              "components/site-template",
+              "components/charts"
             ]
           },
           {
@@ -65,11 +65,11 @@
   "navbar": {
     "links": [
       {
-        "label": "fp-runtime",
+        "label": "runtime",
         "href": "https://github.com/frankenpress/runtime"
       },
       {
-        "label": "fp-charts",
+        "label": "charts",
         "href": "https://github.com/frankenpress/charts"
       }
     ],

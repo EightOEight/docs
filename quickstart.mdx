@@ -6,7 +6,7 @@ icon: "rocket"
 
 This guide spins up a working WordPress site on a local
 [`kind`](https://kind.sigs.k8s.io/) cluster. It uses the published
-`fp-runtime` image and the [`fp-site-template`](https://github.com/frankenpress/site-template)
+`runtime` image and the [`site-template`](https://github.com/frankenpress/site-template)
 template repo unchanged — no fork required for the smoke test.
 
 ## Prerequisites
@@ -58,7 +58,7 @@ template repo unchanged — no fork required for the smoke test.
     <Note>
       `--set site.url=http://localhost:8080` matches the URL you'll
       reach through `kubectl port-forward` in the next step. Without it,
-      `WP_HOME` defaults to `http://fp-site.localhost` and WordPress
+      `WP_HOME` defaults to `http://site.localhost` and WordPress
       301-redirects every `localhost:8080` request away — you'll see
       "unknown app" or a connection error in the browser. For a real
       deploy, set this to your public URL (and enable Ingress / HTTPRoute
@@ -75,7 +75,7 @@ template repo unchanged — no fork required for the smoke test.
     <Tip>
       The default `image.repository` points at the demo site image
       `ghcr.io/frankenpress/site-template` at the chart's `appVersion` tag. To deploy your own
-      site, fork [`fp-site-template`](https://github.com/frankenpress/site-template),
+      site, fork [`site-template`](https://github.com/frankenpress/site-template),
       push a `v*.*.*` tag (CI builds + pushes to your GHCR), then add
       `--set image.repository=ghcr.io/<your-org>/<your-site>,image.tag=v1.0.0`.
     </Tip>
@@ -108,7 +108,7 @@ template repo unchanged — no fork required for the smoke test.
       Want to set the admin password at install time instead of
       retrieving the generated one? Pass
       `--set siteInstall.adminPassword=your-password` on the `helm install`
-      line. See [`fp-charts` → First install](/components/fp-charts#first-install)
+      line. See [`charts` → First install](/components/charts#first-install)
       for the full options including bring-your-own Secret.
     </Tip>
   </Step>
@@ -129,7 +129,7 @@ kind delete cluster --name frankenpress
     The full builder path: fork the template, customise locally,
     publish to your GHCR, deploy your own image.
   </Card>
-  <Card title="Add a plugin" icon="puzzle-piece" href="/components/fp-site-template#adding-plugins-and-themes">
+  <Card title="Add a plugin" icon="puzzle-piece" href="/components/site-template#adding-plugins-and-themes">
     `composer require wpackagist-plugin/<slug>` — composer.json + lock,
     rebuild the image, redeploy.
   </Card>

@@ -4,13 +4,13 @@ description: "Wire wp_mail() through any SMTP provider — Postmark, SendGrid, M
 icon: "envelope"
 ---
 
-The fp-runtime image deliberately ships no MTA, so PHP's `mail()` fails
+The runtime image deliberately ships no MTA, so PHP's `mail()` fails
 silently and `wp_mail()` returns `true` while no email actually
 delivers. Every FrankenPress site lands in this silent-fail state by
 default. This page is the opt-in fix.
 
 The chart's `smtp.*` values + the
-[`SMTPMailer`](/components/fp-mu-plugin#smtpmailer) mu-plugin component
+[`SMTPMailer`](/components/mu-plugin#smtpmailer) mu-plugin component
 wire `wp_mail()` through any SMTP provider — Postmark, SendGrid,
 Mailgun, AWS SES, or an in-cluster relay. Same surface, swap the host.
 
@@ -22,7 +22,7 @@ flowchart LR
     smtpmailer["SMTPMailer<br/>(mu-plugin)"] -->|phpmailer_init filter<br/>reads FP_SMTP_*| pm
     pm -->|SMTP / STARTTLS / TLS| provider[("Provider<br/>or in-cluster relay")]
 
-    chart["fp-charts<br/>smtp.* values"] -.->|configmap + secretKeyRef| smtpmailer
+    chart["charts<br/>smtp.* values"] -.->|configmap + secretKeyRef| smtpmailer
     secret[("Secret<br/>username + password")] -.-> chart
 ```
 
@@ -40,22 +40,22 @@ flowchart LR
 
 The chart's `smtp.*` values are wiring — the actual SMTP send happens
 inside the WP runtime, in the
-[`SMTPMailer`](/components/fp-mu-plugin#smtpmailer) mu-plugin component.
+[`SMTPMailer`](/components/mu-plugin#smtpmailer) mu-plugin component.
 Flipping `smtp.enabled=true` against a site image that doesn't include
-`fp-mu-plugin >=0.5.0` is a no-op: the env vars get injected, no filter
+`mu-plugin >=0.5.0` is a no-op: the env vars get injected, no filter
 gets registered, `wp_mail()` keeps falling through to broken `mail()`.
 
 | If your site image is built from… | Action |
 |---|---|
-| `fp-site-template` (default) | Use **v0.2.4+**. Earlier tags don't include SMTPMailer. |
-| A fork of `fp-site-template` | Bump `eightoeight/fp-mu-plugin` in your `composer.json` to `^0.5.0`, run `composer update`, rebuild the site image, then point the chart at the new tag. |
-| A custom site image | Same — composer-install `eightoeight/fp-mu-plugin: ^0.5.0` somewhere on the autoloader path. |
+| `site-template` (default) | Use **v0.2.4+**. Earlier tags don't include SMTPMailer. |
+| A fork of `site-template` | Bump `eightoeight/mu-plugin` in your `composer.json` to `^0.5.0`, run `composer update`, rebuild the site image, then point the chart at the new tag. |
+| A custom site image | Same — composer-install `eightoeight/mu-plugin: ^0.5.0` somewhere on the autoloader path. |
 
 You can confirm SMTPMailer is present in a running pod:
 
 ```bash
 kubectl -n mysite exec deploy/mysite-site -- \
-  ls /app/web/app/mu-plugins/fp-mu-plugin/src/ | grep SMTPMailer
+  ls /app/web/app/mu-plugins/mu-plugin/src/ | grep SMTPMailer
 ```
 
 ## Quick start (manual Secret)
@@ -238,12 +238,12 @@ env is injected, and the mu-plugin sets `SMTPAuth = false`.
 | State | Behaviour |
 |---|---|
 | `smtp.enabled=false` (default) | No SMTP env injected. `wp_mail()` falls through to `mail()` → silent fail. The [`syncAdminCredentials` initContainer](/operations/admin-credential-rotation) suppresses WP's password-change notification on the rotation path so you don't see noisy `sendmail: not found` lines in initContainer logs. |
-| `smtp.enabled=true`, admin password rotates via the [`syncAdminCredentials` initContainer](/operations/admin-credential-rotation) | When the initContainer runs `wp user update`, WP fires its built-in **"Password Changed"** notification through the configured SMTP server. **Expected behaviour** — most operators want rotation visible in their inbox. To suppress globally, install a `wp_mail` filter mu-plugin (out of scope for `fp-mu-plugin`; one-line `add_filter('send_password_change_email', '__return_false')`). The initContainer's idempotency check ensures **at most one such email per rotation** regardless of replica count. |
+| `smtp.enabled=true`, admin password rotates via the [`syncAdminCredentials` initContainer](/operations/admin-credential-rotation) | When the initContainer runs `wp user update`, WP fires its built-in **"Password Changed"** notification through the configured SMTP server. **Expected behaviour** — most operators want rotation visible in their inbox. To suppress globally, install a `wp_mail` filter mu-plugin (out of scope for `mu-plugin`; one-line `add_filter('send_password_change_email', '__return_false')`). The initContainer's idempotency check ensures **at most one such email per rotation** regardless of replica count. |
 | `smtp.enabled=true`, server reachable, auth + identity valid | Provider accepts the message. `wp_mail()` returns `true`. SiteHealth test reports `good`. **`true` is not the same as "delivered"** — see verification below. |
 | `smtp.enabled=true`, server unreachable | `wp_mail()` returns `false`. The failure is logged via `error_log` (visible in pod stderr / your log shipper). SiteHealth test reports `critical` with errno + message. **No retry**. |
 | `smtp.enabled=true`, auth invalid | Same as unreachable — log + `false` return. Auth failures only surface during the SMTP handshake, not on the SiteHealth TCP-reachability check. |
 | `smtp.enabled=true`, **sender identity unverified** (Postmark Sender Signature, SES verified identity, etc.) | TCP reachability passes, auth passes, the provider rejects with a 5xx during `MAIL FROM`. `wp_mail()` returns `false` and the SMTP response is logged. SiteHealth test stays **green** because TCP-reachability doesn't probe the handshake. **Most common first-time-setup failure** — verify the `fromEmail` identity in the provider dashboard before flipping `smtp.enabled=true`. |
-| Site image lacks `fp-mu-plugin >=0.5.0` | SMTP env vars get injected by the chart, but no `phpmailer_init` filter is registered inside WP, so `wp_mail()` keeps falling through to `mail()` and fails silently. SiteHealth's SMTP-reachability test isn't registered either — there's no signal that anything's wrong. See [Before you start](#before-you-start-site-image-must-include-smtpmailer). |
+| Site image lacks `mu-plugin >=0.5.0` | SMTP env vars get injected by the chart, but no `phpmailer_init` filter is registered inside WP, so `wp_mail()` keeps falling through to `mail()` and fails silently. SiteHealth's SMTP-reachability test isn't registered either — there's no signal that anything's wrong. See [Before you start](#before-you-start-site-image-must-include-smtpmailer). |
 
 ## What's not in the platform
 
@@ -400,6 +400,6 @@ forever. Plus DKIM signing only works at the domain level.
 
 ## Related
 
-- [`fp-mu-plugin` → SMTPMailer](/components/fp-mu-plugin#smtpmailer) — the component reference
-- [`fp-charts` values](/components/fp-charts#values-reference) — the `smtp.*` keys
+- [`mu-plugin` → SMTPMailer](/components/mu-plugin#smtpmailer) — the component reference
+- [`charts` values](/components/charts#values-reference) — the `smtp.*` keys
 - [Operations → Configuration](/operations/configuration) — full env-var reference

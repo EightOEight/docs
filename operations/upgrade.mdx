@@ -11,7 +11,7 @@ own cadence. Upgrades happen at three levels — **runtime**, **mu-plugin**,
 ## Component upgrade order
 
 ```text
-fp-mu-plugin    →    fp-runtime    →    your site image    →    fp-charts
+mu-plugin    →    runtime    →    your site image    →    charts
 (release)            (bake new       (rebuild on top         (helm upgrade
                       mu-plugin tag)  of new runtime)         with new tag)
 ```
@@ -22,13 +22,13 @@ Most upgrades skip steps. A typical example:
 |---|---|
 | WP plugin / theme bump | site image only — `composer update`, tag, deploy |
 | WP core bump | site image — bump `roots/wordpress` constraint, tag, deploy |
-| FrankenPHP / Souin / Caddy module bump | fp-runtime → site image — bump `FRANKENPHP_VERSION` etc., tag fp-runtime, rebuild site image, deploy |
-| Cache invalidation logic change | fp-mu-plugin → fp-runtime → site image |
-| Helm chart change (new value, RBAC, etc.) | fp-charts only — `helm upgrade --version <new>` |
+| FrankenPHP / Souin / Caddy module bump | runtime → site image — bump `FRANKENPHP_VERSION` etc., tag runtime, rebuild site image, deploy |
+| Cache invalidation logic change | mu-plugin → runtime → site image |
+| Helm chart change (new value, RBAC, etc.) | charts only — `helm upgrade --version <new>` |
 
 ## Site image upgrade
 
-The most common case. In your `fp-site-template` fork:
+The most common case. In your `site-template` fork:
 
 ```bash
 git tag v1.2.0
@@ -108,10 +108,10 @@ install.
 
 Each repo publishes release notes on GitHub:
 
-- [`fp-runtime` releases](https://github.com/frankenpress/runtime/releases)
-- [`fp-mu-plugin` releases](https://github.com/frankenpress/mu-plugin/releases)
-- [`fp-charts` releases](https://github.com/frankenpress/charts/releases)
-- (your `fp-site-template` fork's releases for site-specific changes)
+- [`runtime` releases](https://github.com/frankenpress/runtime/releases)
+- [`mu-plugin` releases](https://github.com/frankenpress/mu-plugin/releases)
+- [`charts` releases](https://github.com/frankenpress/charts/releases)
+- (your `site-template` fork's releases for site-specific changes)
 
 Breaking changes are flagged at the top of each release. Treat any
 **major** version bump (e.g. `0.x → 1.0`, `1.x → 2.0`) as requiring a

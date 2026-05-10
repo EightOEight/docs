@@ -141,7 +141,7 @@ plugin from WordPress.org.
 
     <Note>
       `composer.lock` is in `.gitignore` by default in
-      `fp-site-template` — every build resolves to the latest version
+      `site-template` — every build resolves to the latest version
       matching your constraint. Pin tightly (use `^1.6` not `*`) to
       avoid surprise upgrades. Sites that want full reproducibility
       can remove `composer.lock` from `.gitignore` and commit it.
@@ -439,5 +439,5 @@ different theme first.
 ## Companion docs
 
 - [Architecture](/architecture) — why the image is immutable
-- [Components → fp-site-template](/components/fp-site-template) — the Bedrock-shaped repo this all targets
+- [Components → site-template](/components/site-template) — the Bedrock-shaped repo this all targets
 - [Operations → upgrade](/operations/upgrade) — bumping the platform itself (runtime, mu-plugin, chart) follows the same release flow

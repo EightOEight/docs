@@ -4,8 +4,8 @@ description: "Supported PHP × WordPress combinations and how to pick one"
 icon: "table-cells"
 ---
 
-`fp-runtime` ships a multi-arch image for each supported PHP minor.
-`fp-site-template` runs a nightly compat-matrix that confirms each
+`runtime` ships a multi-arch image for each supported PHP minor.
+`site-template` runs a nightly compat-matrix that confirms each
 PHP × WP combination still composes cleanly. This page is the source
 of truth for which combinations are blessed.
 
@@ -19,13 +19,13 @@ of truth for which combinations are blessed.
 PHP < 8.3 is EOL or near-EOL upstream — out of scope. WordPress < 6.8
 is below the floor we commit to support.
 
-The compat-matrix workflow runs on every PR to `fp-site-template` plus
+The compat-matrix workflow runs on every PR to `site-template` plus
 nightly at 06:00 UTC, so any regression introduced by an upstream WP
 point release within `~6.8.0` / `~6.9.0` is caught within 24 hours.
 
 ## Tag schema
 
-`fp-runtime` publishes a multi-arch manifest list (`linux/amd64` +
+`runtime` publishes a multi-arch manifest list (`linux/amd64` +
 `linux/arm64`) under each of these tags:
 
 | Tag | Cadence | Example |
@@ -41,7 +41,7 @@ The default PHP is **`8.3`** — see [Default-PHP cadence](#default-php-cadence)
 
 ## Picking a PHP
 
-`fp-site-template`'s `Dockerfile` defaults the runtime base to the
+`site-template`'s `Dockerfile` defaults the runtime base to the
 default PHP:
 
 ```dockerfile
@@ -102,15 +102,15 @@ currently `8.3`. The default is bumped deliberately — typically ~6
 months after a new PHP minor reaches upstream-stable status, long
 enough for early ecosystem incompatibilities to surface and be patched.
 
-A default-PHP bump is a coordinated PR across `fp-runtime` (the
-`DEFAULT_PHP` env in `build.yml`) and this page. `fp-site-template`
+A default-PHP bump is a coordinated PR across `runtime` (the
+`DEFAULT_PHP` env in `build.yml`) and this page. `site-template`
 forks do **not** auto-bump; each site pins its own PHP via the
 `FP_RUNTIME_VERSION` build arg.
 
 ## What's next
 
 <CardGroup cols={2}>
-  <Card title="fp-runtime" icon="cube" href="/components/fp-runtime">
+  <Card title="runtime" icon="cube" href="/components/runtime">
     Build args, env vars, and the cache-invalidation contract.
   </Card>
   <Card title="Upgrade flow" icon="arrows-rotate" href="/operations/upgrade">

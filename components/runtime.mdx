@@ -1,10 +1,10 @@
 ---
-title: "fp-runtime"
+title: "runtime"
 description: "Caddy + FrankenPHP + Souin base container image"
 icon: "cube"
 ---
 
-[`fp-runtime`](https://github.com/frankenpress/runtime) is the base
+[`runtime`](https://github.com/frankenpress/runtime) is the base
 container image every FrankenPress site extends. It ships:
 
 | Component | Version | Notes |
@@ -15,7 +15,7 @@ container image every FrankenPress site extends. It ships:
 | **dunglas/caddy-cbrotli** | `v1.0.1` | Brotli encoding |
 | **WP-CLI** | `2.12.0` | Cron + admin tasks |
 | **PHP extensions** | gd, intl, exif, zip, opcache, mysqli, pdo_mysql, memcached, redis | WP-friendly set |
-| **fp-mu-plugin** | configurable | Baked at build time via `FP_MU_PLUGIN_VERSION` (default: `v0.1.1`) |
+| **mu-plugin** | configurable | Baked at build time via `FP_MU_PLUGIN_VERSION` (default: `v0.1.1`) |
 
 Published images: a multi-arch manifest list (`linux/amd64` +
 `linux/arm64`) per supported PHP minor — `:php8.3`, `:php8.4`,
@@ -39,7 +39,7 @@ COPY web /app/web
 COPY config /app/config
 ```
 
-[`fp-site-template`](/components/fp-site-template) ships this Dockerfile
+[`site-template`](/components/site-template) ships this Dockerfile
 out of the box.
 
 ## Environment variables
@@ -143,7 +143,7 @@ benign:
   the client connected.
 - The two failure modes this *could* matter for are both already
   closed: authenticated requests are bypassed entirely via the cookie
-  matcher, and invalidation works regardless via fp-mu-plugin
+  matcher, and invalidation works regardless via mu-plugin
   v0.2.1+'s dual-scheme DEL (the `SouinInvalidator` deletes both
   `GET-http-...` and `GET-https-...` variants on every write).
 
@@ -156,7 +156,7 @@ worth the churn for what is purely a `Cache-Status` cosmetic.
 ## Page cache invalidation
 
 Souin caches GET responses in Redis. Invalidation is performed by
-[`fp-mu-plugin`](/components/fp-mu-plugin)'s `SouinInvalidator`,
+[`mu-plugin`](/components/mu-plugin)'s `SouinInvalidator`,
 connecting **directly to Redis** and `DEL`ing cache keys. Souin's
 documented HTTP invalidation APIs (`PURGE`, POST-CRUD, `/api.souin/*`
 admin) are broken in cache-handler v0.16.0 — the workaround is empirical.
@@ -172,14 +172,14 @@ SURROGATE_<tag>                set of cache keys for a given Surrogate-Key tag
 Bulk tag-based invalidation: read `SURROGATE_<tag>` (a Redis SET), then
 pipeline-`DEL` all members. Sub-millisecond.
 
-Full investigation log: [`fp-runtime/PHASE-0.md`](https://github.com/frankenpress/runtime/blob/main/PHASE-0.md).
+Full investigation log: [`runtime/PHASE-0.md`](https://github.com/frankenpress/runtime/blob/main/PHASE-0.md).
 
 ## Local development
 
 ```bash
 git clone https://github.com/frankenpress/runtime
-cd fp-runtime
-make build         # build fp-runtime:dev
+cd runtime
+make build         # build runtime:dev
 make up            # docker compose up -d (runtime + redis)
 make test          # run tests/cache-spike.sh
 make down          # tear down
