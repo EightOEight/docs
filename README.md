@@ -2,7 +2,7 @@
 
 [Mintlify](https://mintlify.com/)-powered documentation for **FrankenPress** —
 the opinionated WordPress-on-Kubernetes stack maintained by
-[FrankENpress](https://frankenpress.com).
+[FrankenPress](https://frankenpress.com).
 
 Live at **<https://docs.frankenpress.com/>** — auto-deployed by Mintlify
 from this repo's main branch.
