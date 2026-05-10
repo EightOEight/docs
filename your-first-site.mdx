@@ -6,7 +6,7 @@ icon: "code-branch"
 
 The [Quickstart](/quickstart) deploys the upstream demo image. This guide
 walks the **builder** path: create your own copy of
-[`fp-site-template`](https://github.com/frankenpress/site-template),
+[`site-template`](https://github.com/frankenpress/site-template),
 let it self-customise, push your own image, and deploy that.
 
 We'll call your new repo **`mysite`** throughout — substitute whatever
@@ -32,13 +32,13 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
 <Steps>
   <Step title="Create your site repo">
     GitHub gives you two ways to derive a new repo from
-    `fp-site-template`. Pick whichever matches how closely you want to
+    `site-template`. Pick whichever matches how closely you want to
     track upstream.
 
     <Tabs>
       <Tab title="Use this template (recommended)">
         Click **[Use this template](https://github.com/frankenpress/site-template/generate)**
-        on `fp-site-template`. Pick an owner and the name `mysite`
+        on `site-template`. Pick an owner and the name `mysite`
         (or whatever you prefer).
 
         - **Pros.** Clean new repo without the template's full git history.
@@ -62,14 +62,14 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
       </Tab>
       <Tab title="Fork">
         Click **[Fork](https://github.com/frankenpress/site-template/fork)**
-        on `fp-site-template`. Pick an owner and the name `mysite`.
+        on `site-template`. Pick an owner and the name `mysite`.
 
         - **Pros.** Shared git history with the template. The "Sync
           fork" button in the GitHub UI does the right thing for trivial
           upstream tracking. Easier when your site stays close to the
           template shape.
         - **Cons.** GitHub shows a "forked from" badge. Can't be made
-          private if `fp-site-template` stays public, without using
+          private if `site-template` stays public, without using
           GitHub's private-fork dance. "Sync fork" auto-merges *every*
           upstream commit, which isn't always what you want for a
           production site — once you have meaningful divergence,
@@ -93,7 +93,7 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     3. Triggers `build.yml` to publish the first image.
 
     You'll see two commits on `main`: the original template snapshot
-    and `chore: initialize from fp-site-template`. Watch progress with:
+    and `chore: initialize from site-template`. Watch progress with:
 
     ```bash
     gh run watch --repo <owner>/mysite
@@ -131,13 +131,13 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
       Manual install is required only for the local Docker Compose
       stack. When you deploy via the Helm chart (the next steps), the
       chart runs `wp core install` automatically as a post-install hook
-      Job — see [fp-charts → First install](/components/fp-charts#first-install).
+      Job — see [charts → First install](/components/charts#first-install).
     </Note>
 
     <Check>
       The "Update WordPress" / "Update Plugins" / "Update Themes"
       buttons should be **absent**. The lockdown is hard-coded in
-      `config/application.php` — see [fp-site-template → Lockdown](/components/fp-site-template#lockdown).
+      `config/application.php` — see [site-template → Lockdown](/components/site-template#lockdown).
     </Check>
 
     Upload a media item under **Media → Add New**. It lands in MinIO
@@ -198,14 +198,14 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
 
     <Note>
       `--set site.url=http://localhost:8080` matches the port-forward
-      URL below. The default (`http://fp-site.localhost`) makes
+      URL below. The default (`http://site.localhost`) makes
       WordPress 301-redirect every `localhost:8080` request away — see
       [Quickstart](/quickstart) for the full explanation. For a real
       deploy, set this to your public URL.
     </Note>
 
     The chart runs `wp core install` automatically as a post-install
-    hook Job — see [`fp-charts` → First install](/components/fp-charts#first-install)
+    hook Job — see [`charts` → First install](/components/charts#first-install)
     for the admin credentials, bring-your-own-Secret, and rotation
     options.
 

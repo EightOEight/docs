@@ -37,9 +37,9 @@ The site pod references a Secret that doesn't exist yet. Common causes:
 
 ### `exec: frankenphp: Operation not permitted`
 
-You're running with `containerSecurityContext.allowPrivilegeEscalation: false` against an `fp-runtime` image **older than the `setcap -r` patch**. Older images carry `cap_net_bind_service=ep` on the binary; the kernel refuses to exec under `no_new_privs`.
+You're running with `containerSecurityContext.allowPrivilegeEscalation: false` against an `runtime` image **older than the `setcap -r` patch**. Older images carry `cap_net_bind_service=ep` on the binary; the kernel refuses to exec under `no_new_privs`.
 
-Fix: upgrade to a newer `fp-runtime` (the cap is stripped at build time on current images), or temporarily set `allowPrivilegeEscalation: true` in your values.
+Fix: upgrade to a newer `runtime` (the cap is stripped at build time on current images), or temporarily set `allowPrivilegeEscalation: true` in your values.
 
 ## Cache symptoms
 
@@ -59,7 +59,7 @@ content is stale beyond the TTL window:
 
 WordPress returned an empty response. Common causes:
 
-- **No theme installed** — `roots/wordpress` is no-content (no bundled themes). Make sure the site composer-installs at least one theme (`fp-site-template` ships `wpackagist-theme/twentytwentyfive` by default).
+- **No theme installed** — `roots/wordpress` is no-content (no bundled themes). Make sure the site composer-installs at least one theme (`site-template` ships `wpackagist-theme/twentytwentyfive` by default).
 - **PHP fatal during request** — check the site pod logs for stack traces.
 - **WP not yet installed** — the install Job hasn't completed yet (or is disabled). Check `kubectl --namespace <ns> get jobs` for the `<release>-site-install` Job; tail the most recent pod's logs for the failure. If `siteInstall.enabled=false`, run `wp core install` manually via `kubectl exec`.
 
@@ -86,7 +86,7 @@ a values override that disabled MinIO without supplying `externalS3.*`.
 The AWS SDK is hitting `s3.amazonaws.com` with credentials that don't
 exist there. Two common causes:
 
-1. **`FP_S3_ENDPOINT` not honoured** — fp-mu-plugin **v0.1.0** had a bug where humanmade/s3-uploads' `S3_UPLOADS_ENDPOINT` constant was defined but not applied to the SDK. Upgrade to v0.1.1 or later (the bake default in `fp-runtime`).
+1. **`FP_S3_ENDPOINT` not honoured** — mu-plugin **v0.1.0** had a bug where humanmade/s3-uploads' `S3_UPLOADS_ENDPOINT` constant was defined but not applied to the SDK. Upgrade to v0.1.1 or later (the bake default in `runtime`).
 2. **Real AWS credentials misconfigured** — verify `FP_S3_KEY` and `FP_S3_SECRET` are correct, and the IAM principal has `s3:GetObject` / `s3:PutObject` / `s3:DeleteObject` / `s3:ListBucket` on the bucket.
 
 ### 0-byte uploads to S3
@@ -104,13 +104,13 @@ behind. Same root cause as
 [humanmade/S3-Uploads#587](https://github.com/humanmade/S3-Uploads/issues/587)
 and [#158](https://github.com/humanmade/S3-Uploads/issues/158).
 
-**Fix**: on fp-mu-plugin v0.2.0+ this is the default — `FP_S3_OBJECT_ACL`
+**Fix**: on mu-plugin v0.2.0+ this is the default — `FP_S3_OBJECT_ACL`
 is unset, the bootstrap defines `S3_UPLOADS_OBJECT_ACL` as `null`, and
 no ACL header is sent. Bump:
 
 ```yaml
 # composer.json
-"eightoeight/fp-mu-plugin": "^0.2.0"
+"eightoeight/mu-plugin": "^0.2.0"
 ```
 
 Confirm the deployed pod has no `FP_S3_OBJECT_ACL` set:
@@ -145,13 +145,13 @@ Admin pages were being served from cache. WP signals `Cache-Control:
 no-store, private` on `/wp-admin/` and the REST API, but cache-handler
 v0.16.0 doesn't reliably honour those directives.
 
-Fixed in fp-runtime v0.1.4+: the global `cache` block uses
+Fixed in runtime v0.1.4+: the global `cache` block uses
 `regex.exclude` to skip every auth-aware path (`/wp-admin/`,
 `/wp-login.php`, `/wp-cron.php`, `/xmlrpc.php`, `/wp-json/`, including
 Bedrock `/wp/...` variants), and a server-block matcher routes any
 request carrying a `wordpress_logged_in_*`, `wp-postpass_*`, or
 `comment_author_*` cookie around the cache directive entirely. See
-[Cacheability model](/components/fp-runtime#cacheability-model).
+[Cacheability model](/components/runtime#cacheability-model).
 
 If you have custom auth-aware paths (membership area, signed-media
 endpoints), set `FP_CACHE_BYPASS_EXTRA` — appended verbatim to the
@@ -179,12 +179,12 @@ Two distinct bugs converged in older releases:
 
 1. **Scheme mismatch** — Souin keyed cache entries with `http` while
    WordPress emitted `https://...` URLs for invalidation. Fixed in
-   fp-runtime v0.1.3+ (Caddy now trusts the upstream proxy's
-   `X-Forwarded-Proto`) and fp-mu-plugin v0.2.1+ (DELs both schemes
+   runtime v0.1.3+ (Caddy now trusts the upstream proxy's
+   `X-Forwarded-Proto`) and mu-plugin v0.2.1+ (DELs both schemes
    defensively).
 2. **Hook timing** — `deleted_post` fires AFTER the row is gone, so
    `get_permalink( $post_id )` returns false and the invalidator
-   no-ops. Fixed in fp-mu-plugin v0.2.2+ (also hooks `wp_trash_post`
+   no-ops. Fixed in mu-plugin v0.2.2+ (also hooks `wp_trash_post`
    and `before_delete_post`, which fire BEFORE the state change with
    the permalink still resolvable).
 
@@ -240,10 +240,10 @@ rebuilds — see [Upgrading](/operations/upgrade).
 ### Browser shows "unknown app" / 301 redirect loop on `localhost:8080`
 
 You're port-forwarding to the site Service but the browser ends up at
-`http://fp-site.localhost/` (or `http://localhost/`) and OrbStack /
+`http://site.localhost/` (or `http://localhost/`) and OrbStack /
 your DNS resolver shows "unknown app" or a connection-refused page.
 
-The chart defaults `WP_HOME` to `http://fp-site.localhost`, and
+The chart defaults `WP_HOME` to `http://site.localhost`, and
 WordPress 301-redirects any request whose `Host` header doesn't match.
 When you `kubectl port-forward` to `localhost:8080`, the browser sends
 `Host: localhost:8080`, which WP rejects.

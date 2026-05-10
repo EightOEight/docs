@@ -13,13 +13,13 @@ chart that deploys on `kind` in under a minute.
     Deploy a working WordPress site on a local `kind` cluster in 3 steps.
   </Card>
   <Card title="Architecture" icon="diagram-project" href="/architecture">
-    What each `fp-*` repo does and how they fit together.
+    What each `*` repo does and how they fit together.
   </Card>
   <Card title="Production topology" icon="cloud" href="/operations/production">
     DragonflyDB Operator, MariaDB Operator, AWS S3, External Secrets.
   </Card>
-  <Card title="Components" icon="layer-group" href="/components/fp-runtime">
-    Deep dives into `fp-runtime`, `fp-mu-plugin`, `fp-site-template`, and `fp-charts`.
+  <Card title="Components" icon="layer-group" href="/components/runtime">
+    Deep dives into `runtime`, `mu-plugin`, `site-template`, and `charts`.
   </Card>
 </CardGroup>
 
@@ -28,32 +28,32 @@ chart that deploys on `kind` in under a minute.
 <Steps>
   <Step title="Caddy + FrankenPHP runtime">
     A single-process container — no nginx, no PHP-FPM, no supervisord.
-    [`fp-runtime`](https://github.com/frankenpress/runtime) bakes
+    [`runtime`](https://github.com/frankenpress/runtime) bakes
     [`caddyserver/cache-handler`](https://github.com/caddyserver/cache-handler)
     (Souin) for HTTP-level page caching with Redis-protocol storage.
   </Step>
   <Step title="Slim must-use plugin">
     Four components, all platform-housekeeping:
-    [`S3UploadsBootstrap`](/components/fp-mu-plugin#s3uploadsbootstrap)
+    [`S3UploadsBootstrap`](/components/mu-plugin#s3uploadsbootstrap)
     (refuses uploads when S3 isn't fully configured — no silent local-disk
     fallback),
-    [`SouinInvalidator`](/components/fp-mu-plugin#souininvalidator)
+    [`SouinInvalidator`](/components/mu-plugin#souininvalidator)
     (direct Redis `DEL` on `save_post` — bypasses cache-handler v0.16.0's
     broken HTTP invalidation APIs),
-    [`SiteHealth`](/components/fp-mu-plugin#sitehealth)
+    [`SiteHealth`](/components/mu-plugin#sitehealth)
     (suppresses Site Health tests whose failure is intentional under the
     immutable-image lockdown), and opt-in
-    [`SMTPMailer`](/components/fp-mu-plugin#smtpmailer)
+    [`SMTPMailer`](/components/mu-plugin#smtpmailer)
     (transport-agnostic SMTP for `wp_mail()` — Postmark, SendGrid, SES, etc.).
   </Step>
   <Step title="GitHub-template site">
-    [`fp-site-template`](https://github.com/frankenpress/site-template)
+    [`site-template`](https://github.com/frankenpress/site-template)
     is a Bedrock-layout WordPress site preconfigured for the runtime.
     Click "Use this template", run `make setup`, you have a site.
   </Step>
   <Step title="Bitnami-style Helm chart">
-    [`fp-charts`](https://github.com/frankenpress/charts) ships
-    `site` — a Helm chart that consumes any `fp-site-template`-built
+    [`charts`](https://github.com/frankenpress/charts) ships
+    `site` — a Helm chart that consumes any `site-template`-built
     image. Bundles MariaDB + Redis + MinIO subcharts for instant
     `kind` deploys. Production swaps to managed services / operators.
   </Step>
@@ -63,7 +63,7 @@ chart that deploys on `kind` in under a minute.
     site — no manual `kubectl exec`. Idempotent across upgrades; opt-in
     `syncAdminCredentials` reconciles the admin password from a
     Secret on every release for ESO/Sealed-Secret rotation flows.
-    See [fp-charts → First install](/components/fp-charts#first-install).
+    See [charts → First install](/components/charts#first-install).
   </Step>
 </Steps>
 
@@ -80,5 +80,5 @@ chart that deploys on `kind` in under a minute.
 
 <Note>
   FrankenPress is built and maintained by [EightOEight](https://eightoeight.io).
-  All four `fp-*` repositories are Apache-2.0 licensed.
+  All four `*` repositories are Apache-2.0 licensed.
 </Note>

@@ -17,7 +17,7 @@ from this repo's main branch.
 - `docs.json` — config + sidebar navigation. Adding a page means adding it to a `pages: [...]` array under the appropriate `groups[]` entry under `navigation.tabs[].groups[]`.
 - `*.mdx` — Markdown + JSX. Frontmatter (`title`, `description`, `icon`) controls the page header. Mintlify uses [Lucide-style](https://lucide.dev/) and FontAwesome icon names.
 - Components: `<Card>`, `<CardGroup>`, `<Steps>` / `<Step>`, `<AccordionGroup>` / `<Accordion>`, `<Tip>`, `<Note>`, `<Warning>`, `<Check>`, `<Tabs>` / `<Tab>`. Use them — they render way better than equivalent Markdown.
-- Internal links are absolute paths without the `.mdx` extension: `[X](/components/fp-runtime)`.
+- Internal links are absolute paths without the `.mdx` extension: `[X](/components/runtime)`.
 - External links use full URLs.
 - Code blocks: triple backticks with a language tag. For shell commands, prefer `bash`. Use `text` for plain output / diagrams.
 
@@ -26,7 +26,7 @@ from this repo's main branch.
 - `index.mdx` — landing page.
 - `architecture.mdx` — ASCII flow diagram + image-promotion model.
 - `quickstart.mdx` — 3-step kind-cluster deploy. **Smoke-tested verbatim on every release** — if a step fails when run as written, treat it as a release blocker.
-- `components/<repo>.mdx` — one per `fp-*` repo. Env vars, build args, install patterns.
+- `components/<repo>.mdx` — one per `*` repo. Env vars, build args, install patterns.
 - `operations/{production,configuration,upgrade,troubleshooting}.mdx` — operational reference.
 - `docs.json` — navigation + branding.
 
@@ -38,7 +38,7 @@ from this repo's main branch.
 - **Show the failure mode.** "If X is missing, you'll see Y" — readers are usually here because something broke.
 - **Production-vs-dev symmetry.** Every "this is the dev default" statement is paired with the production swap. The chart's bundled subcharts are the easiest example.
 - **Lockdown is a feature, not a bug.** The "Update WordPress" buttons are absent on purpose. Frame this clearly when it comes up — readers will assume it's a bug otherwise.
-- **Internal links use the canonical path.** `/components/fp-runtime` not `https://docs.frankenpress.com/components/fp-runtime` (Mintlify rewrites correctly + makes preview deployments work).
+- **Internal links use the canonical path.** `/components/runtime` not `https://docs.frankenpress.com/components/runtime` (Mintlify rewrites correctly + makes preview deployments work).
 
 ## Don'ts
 
@@ -62,8 +62,8 @@ The Mintlify preview is `mint dev` from the repo root after `npm i -g mint`.
 
 ## When you change a public env var or values key in another repo
 
-If anyone bumps or renames anything in `fp-runtime`, `fp-mu-plugin`,
-`fp-site-template`, or `fp-charts` that's documented here, update:
+If anyone bumps or renames anything in `runtime`, `mu-plugin`,
+`site-template`, or `charts` that's documented here, update:
 
 1. The component-specific page (`/components/<name>`)
 2. `/operations/configuration` (the env-var reference)
@@ -80,8 +80,8 @@ mint dev          # serves at http://localhost:3000
 
 | Repo | Purpose |
 |---|---|
-| [`fp-runtime`](https://github.com/frankenpress/runtime) | Base container image |
-| [`fp-mu-plugin`](https://github.com/frankenpress/mu-plugin) | Must-use plugin |
-| [`fp-site-template`](https://github.com/frankenpress/site-template) | GitHub template for new sites |
-| [`fp-charts`](https://github.com/frankenpress/charts) | Helm chart `site` |
+| [`runtime`](https://github.com/frankenpress/runtime) | Base container image |
+| [`mu-plugin`](https://github.com/frankenpress/mu-plugin) | Must-use plugin |
+| [`site-template`](https://github.com/frankenpress/site-template) | GitHub template for new sites |
+| [`charts`](https://github.com/frankenpress/charts) | Helm chart `site` |
 | [`docs`](https://github.com/frankenpress/docs) (this repo) | Mintlify docs |

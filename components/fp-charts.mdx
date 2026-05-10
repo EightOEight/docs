@@ -1,10 +1,10 @@
 ---
-title: "fp-charts"
+title: "charts"
 description: "Helm chart for deploying FrankenPress sites to Kubernetes"
 icon: "ship"
 ---
 
-[`fp-charts`](https://github.com/frankenpress/charts) ships **`site`** —
+[`charts`](https://github.com/frankenpress/charts) ships **`site`** —
 a Helm chart that deploys a single FrankenPress WordPress site to
 Kubernetes. Bitnami chart style throughout: every value annotated with
 `## @param`, naming + labels via the `bitnami/common` library, optional
@@ -94,7 +94,7 @@ the most-used keys:
 |---|---|---|
 | `image.repository` | `frankenpress/site-template` | Your site image |
 | `image.tag` | `""` (chart appVersion) | Pin per release |
-| `site.url` | `http://fp-site.localhost` | `WP_HOME` — must match your access URL |
+| `site.url` | `http://site.localhost` | `WP_HOME` — must match your access URL |
 | `site.env` | `production` | Selects `config/environments/<env>.php` |
 | `keysSalts.autoGenerate` | `true` | Off → set `keysSalts.existingSecret` |
 | `siteInstall.enabled` | `true` | Off → skip auto `wp core install` (use for DB-restore deploys) |
@@ -111,7 +111,7 @@ the most-used keys:
 | `wpCron.enabled` | `true` | Run a CronJob that fires `wp cron event run --due-now`. When true, the chart also sets `DISABLE_WP_CRON=true` on the site so WP's in-process pseudo-cron doesn't fire alongside it (the two settings are coupled). Disable to fall back to WP's request-triggered cron. |
 | `wpCron.schedule` | `*/5 * * * *` | wp-cron CronJob frequency |
 | `serviceMonitor.enabled` | `false` | Render a prometheus-operator `ServiceMonitor` for the `:9145/metrics` endpoint. Self-gates on the `monitoring.coreos.com/v1` CRD — leaving on for clusters without it is safe (renders nothing). Set `serviceMonitor.labels` to whatever your Prometheus's `serviceMonitorSelector` expects. |
-| `smtp.enabled` | `false` | Wire `wp_mail()` through SMTP. Inject 5 `FP_SMTP_*` env vars + 2 `secretKeyRef` env entries into the Deployment, wpcron CronJob, and install Job. Pairs with the [SMTPMailer mu-plugin component](/components/fp-mu-plugin#smtpmailer). Transport-agnostic — Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay. See [Operations → Email](/operations/email) for provider recipes. Requires `fp-site-template` v0.2.4+. |
+| `smtp.enabled` | `false` | Wire `wp_mail()` through SMTP. Inject 5 `FP_SMTP_*` env vars + 2 `secretKeyRef` env entries into the Deployment, wpcron CronJob, and install Job. Pairs with the [SMTPMailer mu-plugin component](/components/mu-plugin#smtpmailer). Transport-agnostic — Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay. See [Operations → Email](/operations/email) for provider recipes. Requires `site-template` v0.2.4+. |
 | `smtp.host` / `smtp.port` / `smtp.encryption` | `""` / `587` / `tls` | SMTP server, TCP port, transport encryption (`tls` for STARTTLS, `ssl` for implicit TLS, `""` for plaintext local-dev only). |
 | `smtp.auth.existingSecret` | `""` | Required when `smtp.enabled=true` and the server requires auth. Secret keys default to `username` / `password`; override via `smtp.auth.usernameKey` / `passwordKey`. Leave empty for unauthenticated in-cluster relays. |
 | `tmpfsSize.tmp` / `data` / `config` | `256Mi` / `64Mi` / `16Mi` | tmpfs sizes for the read-only-root pod |

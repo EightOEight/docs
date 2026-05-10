@@ -24,7 +24,7 @@ log stream.
 A Caddy access log line looks like:
 
 ```json
-{"level":"info","ts":1778097120.412,"logger":"http.log.access.log0","msg":"handled request","request":{"remote_ip":"10.244.0.5","method":"GET","host":"fp-site.example.com","uri":"/2026/05/welcome/","headers":{"User-Agent":["Mozilla/5.0"]}},"bytes_read":0,"user_id":"","duration":0.0341,"size":18234,"status":200,"resp_headers":{"Content-Type":["text/html; charset=UTF-8"],"Cache-Status":["Souin; hit; ttl=287"]}}
+{"level":"info","ts":1778097120.412,"logger":"http.log.access.log0","msg":"handled request","request":{"remote_ip":"10.244.0.5","method":"GET","host":"site.example.com","uri":"/2026/05/welcome/","headers":{"User-Agent":["Mozilla/5.0"]}},"bytes_read":0,"user_id":"","duration":0.0341,"size":18234,"status":200,"resp_headers":{"Content-Type":["text/html; charset=UTF-8"],"Cache-Status":["Souin; hit; ttl=287"]}}
 ```
 
 The `Cache-Status` response header tells you whether Souin served from
@@ -166,7 +166,7 @@ default Caddy log pipeline applies.
 
 | Symptom | Likely cause |
 |---|---|
-| Only startup chatter in stdout, no per-request lines | You're on an `fp-runtime` image older than the JSON-access-log change. Pull the latest tag and `helm upgrade`. |
+| Only startup chatter in stdout, no per-request lines | You're on an `runtime` image older than the JSON-access-log change. Pull the latest tag and `helm upgrade`. |
 | WP debug entries missing from logs in staging | `WP_DEBUG_LOG` was overridden to `true` (writes to disk); confirm it resolves to `php://stderr` in your `config/environments/staging.php`. |
 | Vector / Alloy isn't seeing the pod's logs | Label selector mismatch — verify `app.kubernetes.io/name=site` is present on the pod (`kubectl get pod -o yaml | grep -A1 labels`). |
 | Cache-Status header missing from access log lines | Souin only sets it on requests that flow through the `cache` directive. Logged-in / authenticated requests bypass cache by design and show no `Cache-Status`. |

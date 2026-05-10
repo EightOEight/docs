@@ -54,7 +54,7 @@ documents the recommended swaps.
     operational burden off you and is usually cheaper at WordPress-site
     scale.
 
-    `humanmade/s3-uploads` (which `fp-mu-plugin` configures) talks the
+    `humanmade/s3-uploads` (which `mu-plugin` configures) talks the
     S3 API; it doesn't care which provider answers.
   </Accordion>
 
@@ -75,13 +75,13 @@ documents the recommended swaps.
 
 When you swap the bundled MinIO subchart for a real S3 (or R2 / GCS XML)
 bucket, configure it as below. These defaults match what
-[`fp-mu-plugin`](/components/fp-mu-plugin) v0.2.0+ expects.
+[`mu-plugin`](/components/mu-plugin) v0.2.0+ expects.
 
 ### Bucket settings
 
 | Setting | Value | Why |
 |---|---|---|
-| **Object Ownership** | **Bucket owner enforced** (ACLs disabled) | The AWS new-bucket default since April 2023. fp-mu-plugin v0.2.0+ omits the `x-amz-acl` header by default, which is exactly what this mode requires. Mismatched ACL settings on a bucket-owner-enforced bucket cause every PUT to silently abort with a [0-byte object](/operations/troubleshooting#0-byte-uploads-to-s3). |
+| **Object Ownership** | **Bucket owner enforced** (ACLs disabled) | The AWS new-bucket default since April 2023. mu-plugin v0.2.0+ omits the `x-amz-acl` header by default, which is exactly what this mode requires. Mismatched ACL settings on a bucket-owner-enforced bucket cause every PUT to silently abort with a [0-byte object](/operations/troubleshooting#0-byte-uploads-to-s3). |
 | **Block Public Access** | Block all public access — **on** if media is served via CDN; off only if the bucket itself is the public origin | Modern WP sites front media with CloudFront / Cloudflare and grant the CDN access via OAC / a bucket policy, not via per-object public ACLs. |
 | **Versioning** | Enabled | Cheap insurance against accidental overwrites or deletes. WP attachment edits (rotation, scaling) overwrite the original key on the s3-uploads stream wrapper. |
 | **Default encryption** | SSE-S3 (AES256) | The AWS default. SSE-KMS is fine too; KMS adds per-request cost and IAM friction for marginal threat-model benefit on public-by-design media. |
@@ -340,7 +340,7 @@ The chart's defaults already satisfy PodSecurity Standard `restricted:latest` �
 RuntimeDefault` at the pod level; `allowPrivilegeEscalation: false`,
 `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]` per container — so
 production overrides above don't need to repeat them. If you build a custom
-`fp-runtime` that re-adds the `cap_net_bind_service` file capability, override
+`runtime` that re-adds the `cap_net_bind_service` file capability, override
 `containerSecurityContext.allowPrivilegeEscalation: true` and
 `containerSecurityContext.capabilities.add: [NET_BIND_SERVICE]` (the kernel's
 `no_new_privs` flag would otherwise refuse to exec the binary). The published
