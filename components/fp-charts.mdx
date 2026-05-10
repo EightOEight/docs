@@ -4,7 +4,7 @@ description: "Helm chart for deploying FrankenPress sites to Kubernetes"
 icon: "ship"
 ---
 
-[`fp-charts`](https://github.com/EightOEight/fp-charts) ships **`fp-site`** —
+[`fp-charts`](https://github.com/frankenpress/charts) ships **`site`** —
 a Helm chart that deploys a single FrankenPress WordPress site to
 Kubernetes. Bitnami chart style throughout: every value annotated with
 `## @param`, naming + labels via the `bitnami/common` library, optional
@@ -15,7 +15,7 @@ subchart deps via the Bitnami OCI registry.
 The chart is published as an OCI artifact on GHCR:
 
 ```bash
-helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm install mysite oci://ghcr.io/frankenpress/charts/site \
   --version 0.5.0 \
   --namespace mysite --create-namespace
 ```
@@ -87,12 +87,12 @@ for the rotation flow.
 ## Values reference
 
 The full annotated values reference is in
-[`charts/fp-site/values.yaml`](https://github.com/EightOEight/fp-charts/blob/main/charts/fp-site/values.yaml);
+[`charts/site/values.yaml`](https://github.com/frankenpress/charts/blob/main/charts/site/values.yaml);
 the most-used keys:
 
 | Key | Default | Purpose |
 |---|---|---|
-| `image.repository` | `eightoeight/fp-site-template` | Your site image |
+| `image.repository` | `frankenpress/site-template` | Your site image |
 | `image.tag` | `""` (chart appVersion) | Pin per release |
 | `site.url` | `http://fp-site.localhost` | `WP_HOME` — must match your access URL |
 | `site.env` | `production` | Selects `config/environments/<env>.php` |
@@ -133,18 +133,18 @@ re-runs), so the Job is safe across `helm upgrade`s.
 
 ### Default behavior
 
-By default, the chart creates a `<release>-fp-site-install` Secret with
+By default, the chart creates a `<release>-site-install` Secret with
 a random 32-char admin password. Retrieve it after install:
 
 ```bash
-kubectl --namespace mysite get secret mysite-fp-site-install \
+kubectl --namespace mysite get secret mysite-site-install \
   -o jsonpath='{.data.admin_password}' | base64 -d
 ```
 
 Override the username, email, or password at install:
 
 ```bash
-helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm install mysite oci://ghcr.io/frankenpress/charts/site \
   --set siteInstall.adminUser=alice \
   --set siteInstall.adminEmail=alice@example.com \
   --set siteInstall.adminPassword=please-change-me
@@ -196,7 +196,7 @@ commonAnnotations:
   # admin_password / admin_email change. commonAnnotations lands on
   # the Deployment's metadata.annotations (where Reloader looks);
   # podAnnotations lands on the pod-template (which Reloader ignores).
-  secret.reloader.stakater.com/reload: "<release>-fp-site-install"
+  secret.reloader.stakater.com/reload: "<release>-site-install"
 ```
 
 Once that's wired, the full flow is automatic:
@@ -227,7 +227,7 @@ the restart trigger).
 For sites being restored from an existing database dump:
 
 ```bash
-helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm install mysite oci://ghcr.io/frankenpress/charts/site \
   --set siteInstall.enabled=false
 ```
 
@@ -294,4 +294,4 @@ keysSalts:
 ## CI / publishing
 
 - **`lint.yml`** — `helm lint` + `helm template` + `chart-testing ct lint` on every push and PR.
-- **`release.yml`** — on `v*.*.*` tag push, `helm package` + push to `oci://ghcr.io/eightoeight/charts/fp-site:<version>`. Tag-driven, never push-to-main-driven, so `Chart.yaml` `version` and the git tag move together. OCI is the canonical channel — no `gh-pages` fallback.
+- **`release.yml`** — on `v*.*.*` tag push, `helm package` + push to `oci://ghcr.io/frankenpress/charts/site:<version>`. Tag-driven, never push-to-main-driven, so `Chart.yaml` `version` and the git tag move together. OCI is the canonical channel — no `gh-pages` fallback.

@@ -186,7 +186,7 @@ plugin from WordPress.org.
 
     ```yaml
     # gitops/.../values.yaml
-    fp-site:
+    site:
       image:
         tag: 0.1.6   # was 0.1.5
     ```
@@ -197,7 +197,7 @@ plugin from WordPress.org.
     If you're using `helm upgrade` directly instead of GitOps:
 
     ```bash
-    helm upgrade <release> oci://ghcr.io/eightoeight/charts/fp-site \
+    helm upgrade <release> oci://ghcr.io/frankenpress/charts/site \
       --reuse-values --set image.tag=0.1.6
     ```
   </Step>
@@ -209,7 +209,7 @@ plugin from WordPress.org.
     state. Activate it once with `wp-cli`:
 
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp plugin activate classic-editor --allow-root --path=/app/web/wp
     ```
 
@@ -221,7 +221,7 @@ plugin from WordPress.org.
   <Step title="Verify">
     ```bash
     # Plugin is installed AND active
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp plugin list --allow-root --path=/app/web/wp \
       | grep classic-editor
     # expect: classic-editor    active   none    1.6.7
@@ -249,7 +249,7 @@ The reverse of the add flow. Two extra rules:
 <Steps>
   <Step title="Deactivate via wp-cli (against the live cluster)">
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp plugin deactivate classic-editor --allow-root --path=/app/web/wp
     ```
 
@@ -291,7 +291,7 @@ The reverse of the add flow. Two extra rules:
     Once ArgoCD has synced and the new pods are up:
 
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp plugin list --allow-root --path=/app/web/wp \
       | grep classic-editor || echo "classic-editor removed"
     ```
@@ -329,7 +329,7 @@ theme as the example.
     time. Activating swaps to the new theme:
 
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp theme activate twentytwentythree --allow-root --path=/app/web/wp
     ```
 
@@ -341,7 +341,7 @@ theme as the example.
 
   <Step title="Verify">
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp theme list --status=active --allow-root --path=/app/web/wp
     # expect: twentytwentythree   active   ...
     ```
@@ -360,7 +360,7 @@ different theme first.
 <Steps>
   <Step title="Switch to a different active theme first">
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp theme activate <other-theme> --allow-root --path=/app/web/wp
     ```
 
@@ -387,7 +387,7 @@ different theme first.
     After the new pods are up:
 
     ```bash
-    kubectl -n <ns> exec deploy/<release>-fp-site -- \
+    kubectl -n <ns> exec deploy/<release>-site -- \
       wp theme list --allow-root --path=/app/web/wp \
       | grep twentytwentythree || echo "twentytwentythree removed"
     ```
@@ -402,13 +402,13 @@ different theme first.
     node that already had it. Force a rollout to be sure:
 
     ```bash
-    kubectl -n <ns> rollout restart deploy/<release>-fp-site
+    kubectl -n <ns> rollout restart deploy/<release>-site
     ```
 
     Confirm with:
 
     ```bash
-    kubectl -n <ns> get pods -l app.kubernetes.io/name=fp-site \
+    kubectl -n <ns> get pods -l app.kubernetes.io/name=site \
       -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
     ```
   </Accordion>

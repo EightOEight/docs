@@ -4,7 +4,7 @@ description: "Replace in-cluster subcharts with managed services for production 
 icon: "cloud"
 ---
 
-The default `fp-site` Helm install bundles in-cluster MariaDB + Redis +
+The default `site` Helm install bundles in-cluster MariaDB + Redis +
 MinIO subcharts so a `helm install` works on `kind` with zero
 prerequisites. **These defaults are not for production.** This page
 documents the recommended swaps.
@@ -181,8 +181,8 @@ If you ran `helm install` with the chart's defaults you already have a
 working site backed by **auto-generated** WP keys+salts and admin
 credentials, stored in two `Secret`s:
 
-- `<release>-fp-site-keys` — the eight WP auth keys and salts
-- `<release>-fp-site-install` — the wp-admin credentials (when
+- `<release>-site-keys` — the eight WP auth keys and salts
+- `<release>-site-install` — the wp-admin credentials (when
   `siteInstall.autoGenerate: true`)
 
 To move to a secret-manager-backed deploy without losing your existing
@@ -196,7 +196,7 @@ JSON object ready to paste into a single AWS Secrets Manager / GCP
 Secret Manager / Vault secret:
 
 ```bash
-kubectl -n <ns> get secret <release>-fp-site-keys -o json \
+kubectl -n <ns> get secret <release>-site-keys -o json \
   | jq '.data | with_entries(.value |= @base64d)'
 ```
 
@@ -215,7 +215,7 @@ Output is a flat object with the eight keys (`AUTH_KEY`,
 `KEY=value`-per-line if you'd rather pipe into something else:
 
 ```bash
-kubectl -n <ns> get secret <release>-fp-site-keys -o json \
+kubectl -n <ns> get secret <release>-site-keys -o json \
   | jq -r '.data | to_entries[] | "\(.key)=\(.value | @base64d)"'
 ```
 
@@ -224,7 +224,7 @@ Push to AWS Secrets Manager in one shot:
 ```bash
 aws secretsmanager create-secret \
   --name mysite/wp-keys \
-  --secret-string "$(kubectl -n <ns> get secret <release>-fp-site-keys -o json \
+  --secret-string "$(kubectl -n <ns> get secret <release>-site-keys -o json \
       | jq -r '.data | with_entries(.value |= @base64d)')"
 ```
 
@@ -241,7 +241,7 @@ keysSalts:
 Same shape:
 
 ```bash
-kubectl -n <ns> get secret <release>-fp-site-install -o json \
+kubectl -n <ns> get secret <release>-site-install -o json \
   | jq '.data | with_entries(.value |= @base64d)'
 ```
 
@@ -264,8 +264,8 @@ the chart consumes:
 
 | Auto-generated Secret | Used by | Migrate to |
 |---|---|---|
-| `<release>-fp-site-keys` | All pods (env: 8 keys+salts) | `keysSalts.existingSecret` |
-| `<release>-fp-site-install` | Install Job (admin creds) | `siteInstall.existingSecret` |
+| `<release>-site-keys` | All pods (env: 8 keys+salts) | `keysSalts.existingSecret` |
+| `<release>-site-install` | Install Job (admin creds) | `siteInstall.existingSecret` |
 | `<release>-mariadb` | All pods (`DB_PASSWORD`) | `externalDatabase.existingSecret` (after disabling the subchart) |
 | `<release>-minio` | All pods (`FP_S3_KEY`/`FP_S3_SECRET`) | `externalS3.existingSecret` (keys: `access-key`, `secret-key`) |
 
@@ -349,7 +349,7 @@ runtime strips the cap, so this only matters for forked images.
 Install:
 
 ```bash
-helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm install mysite oci://ghcr.io/frankenpress/charts/site \
   --namespace mysite --create-namespace \
   --values values-prod.yaml
 ```

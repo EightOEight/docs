@@ -6,7 +6,7 @@ icon: "rocket"
 
 This guide spins up a working WordPress site on a local
 [`kind`](https://kind.sigs.k8s.io/) cluster. It uses the published
-`fp-runtime` image and the [`fp-site-template`](https://github.com/EightOEight/fp-site-template)
+`fp-runtime` image and the [`fp-site-template`](https://github.com/frankenpress/site-template)
 template repo unchanged — no fork required for the smoke test.
 
 ## Prerequisites
@@ -46,7 +46,7 @@ template repo unchanged — no fork required for the smoke test.
     The chart is published as an OCI artifact on GHCR. Install it with all subchart defaults (in-cluster MariaDB + Redis + MinIO — fine for kind, **not for production**):
 
     ```bash
-    helm install mysite oci://ghcr.io/eightoeight/charts/fp-site \
+    helm install mysite oci://ghcr.io/frankenpress/charts/site \
       --version 0.5.0 \
       --namespace mysite --create-namespace \
       --set site.url=http://localhost:8080 \
@@ -74,8 +74,8 @@ template repo unchanged — no fork required for the smoke test.
 
     <Tip>
       The default `image.repository` points at the demo site image
-      `ghcr.io/eightoeight/fp-site-template` at the chart's `appVersion` tag. To deploy your own
-      site, fork [`fp-site-template`](https://github.com/EightOEight/fp-site-template),
+      `ghcr.io/frankenpress/site-template` at the chart's `appVersion` tag. To deploy your own
+      site, fork [`fp-site-template`](https://github.com/frankenpress/site-template),
       push a `v*.*.*` tag (CI builds + pushes to your GHCR), then add
       `--set image.repository=ghcr.io/<your-org>/<your-site>,image.tag=v1.0.0`.
     </Tip>
@@ -85,14 +85,14 @@ template repo unchanged — no fork required for the smoke test.
     Retrieve the auto-generated admin password:
 
     ```bash
-    kubectl --namespace mysite get secret mysite-fp-site-install \
+    kubectl --namespace mysite get secret mysite-site-install \
       -o jsonpath='{.data.admin_password}' | base64 -d
     ```
 
     Port-forward the Service:
 
     ```bash
-    kubectl --namespace mysite port-forward svc/mysite-fp-site 8080:80
+    kubectl --namespace mysite port-forward svc/mysite-site 8080:80
     ```
 
     Open **http://localhost:8080/wp/wp-admin/** in your browser. Log in
@@ -145,6 +145,6 @@ kind delete cluster --name frankenpress
 <Note>
   **Smoke-tested.** This quickstart is run end-to-end against a fresh
   `kind` cluster as part of FrankenPress release validation. If a step
-  fails, [open an issue](https://github.com/EightOEight/fp-charts/issues)
+  fails, [open an issue](https://github.com/frankenpress/charts/issues)
   with the output — we treat docs drift as a real bug.
 </Note>

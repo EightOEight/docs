@@ -80,8 +80,8 @@ mint dev          # serves at http://localhost:3000
 
 | Repo | Purpose |
 |---|---|
-| [`fp-runtime`](https://github.com/EightOEight/fp-runtime) | Base container image |
-| [`fp-mu-plugin`](https://github.com/EightOEight/fp-mu-plugin) | Must-use plugin |
-| [`fp-site-template`](https://github.com/EightOEight/fp-site-template) | GitHub template for new sites |
-| [`fp-charts`](https://github.com/EightOEight/fp-charts) | Helm chart `fp-site` |
-| [`docs`](https://github.com/EightOEight/docs) (this repo) | Mintlify docs |
+| [`fp-runtime`](https://github.com/frankenpress/runtime) | Base container image |
+| [`fp-mu-plugin`](https://github.com/frankenpress/mu-plugin) | Must-use plugin |
+| [`fp-site-template`](https://github.com/frankenpress/site-template) | GitHub template for new sites |
+| [`fp-charts`](https://github.com/frankenpress/charts) | Helm chart `site` |
+| [`docs`](https://github.com/frankenpress/docs) (this repo) | Mintlify docs |

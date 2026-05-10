@@ -28,7 +28,7 @@ chart that deploys on `kind` in under a minute.
 <Steps>
   <Step title="Caddy + FrankenPHP runtime">
     A single-process container — no nginx, no PHP-FPM, no supervisord.
-    [`fp-runtime`](https://github.com/EightOEight/fp-runtime) bakes
+    [`fp-runtime`](https://github.com/frankenpress/runtime) bakes
     [`caddyserver/cache-handler`](https://github.com/caddyserver/cache-handler)
     (Souin) for HTTP-level page caching with Redis-protocol storage.
   </Step>
@@ -47,13 +47,13 @@ chart that deploys on `kind` in under a minute.
     (transport-agnostic SMTP for `wp_mail()` — Postmark, SendGrid, SES, etc.).
   </Step>
   <Step title="GitHub-template site">
-    [`fp-site-template`](https://github.com/EightOEight/fp-site-template)
+    [`fp-site-template`](https://github.com/frankenpress/site-template)
     is a Bedrock-layout WordPress site preconfigured for the runtime.
     Click "Use this template", run `make setup`, you have a site.
   </Step>
   <Step title="Bitnami-style Helm chart">
-    [`fp-charts`](https://github.com/EightOEight/fp-charts) ships
-    `fp-site` — a Helm chart that consumes any `fp-site-template`-built
+    [`fp-charts`](https://github.com/frankenpress/charts) ships
+    `site` — a Helm chart that consumes any `fp-site-template`-built
     image. Bundles MariaDB + Redis + MinIO subcharts for instant
     `kind` deploys. Production swaps to managed services / operators.
   </Step>

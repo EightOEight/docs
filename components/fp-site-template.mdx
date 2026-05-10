@@ -4,7 +4,7 @@ description: "GitHub template for new WordPress sites"
 icon: "file-code"
 ---
 
-[`fp-site-template`](https://github.com/EightOEight/fp-site-template) is
+[`fp-site-template`](https://github.com/frankenpress/site-template) is
 a [GitHub template repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template)
 for new WordPress sites running on the FrankenPress stack.
 
@@ -91,7 +91,7 @@ by FrankenPress:
 
 <Steps>
   <Step title="Use this template">
-    Click **[Use this template](https://github.com/EightOEight/fp-site-template/generate)** on the repo. Pick a name (e.g. `mysite`).
+    Click **[Use this template](https://github.com/frankenpress/site-template/generate)** on the repo. Pick a name (e.g. `mysite`).
   </Step>
   <Step title="Bootstrap locally">
     ```bash
@@ -190,7 +190,7 @@ The image is then available at `ghcr.io/<your-org>/<your-site>:v1.0.0`.
 Deploy with:
 
 ```bash
-helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm upgrade mysite oci://ghcr.io/frankenpress/charts/site \
   --namespace mysite \
   --set image.repository=ghcr.io/<your-org>/<your-site> \
   --set image.tag=v1.0.0

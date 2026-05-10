@@ -105,16 +105,16 @@ Set at image build time with `--build-arg`:
 | `WP_CLI_VERSION` | `2.12.0` | WP-CLI release |
 | `FP_MU_PLUGIN_VERSION` | `v0.1.1` | fp-mu-plugin tag to bake; set to `""` to skip |
 
-## Helm values (fp-site chart)
+## Helm values (site chart)
 
 A condensed reference of the most-used values — see
-[`fp-charts/charts/fp-site/values.yaml`](https://github.com/EightOEight/fp-charts/blob/main/charts/fp-site/values.yaml)
+[`fp-charts/charts/site/values.yaml`](https://github.com/frankenpress/charts/blob/main/charts/site/values.yaml)
 for every annotated parameter.
 
 ```yaml
 image:
   registry: ghcr.io
-  repository: eightoeight/fp-site-template
+  repository: frankenpress/site-template
   tag: ""                       # defaults to chart appVersion
   pullPolicy: IfNotPresent
   pullSecrets: []
@@ -133,7 +133,7 @@ siteInstall:                    # post-install/post-upgrade `wp core install` + 
   title: "FrankenPress site"
   adminUser: "admin"
   adminEmail: "admin@example.com"
-  adminPassword: ""             # empty → generated; stored in <release>-fp-site-install Secret
+  adminPassword: ""             # empty → generated; stored in <release>-site-install Secret
   autoGenerate: true            # render the install Secret; off if existingSecret is set
   existingSecret: ""            # bring-your-own Secret (any source: ESO, Sealed, manual)
   existingSecretAdminUserKey: "admin_user"
@@ -210,7 +210,7 @@ etc.), restart the Deployment and pods pick up the new value. No
 chart-side reconciliation is required.
 
 ```bash
-kubectl rollout restart deployment/mysite-fp-site
+kubectl rollout restart deployment/mysite-site
 ```
 
 Or wire up [Stakater Reloader](/operations/email#auto-rolling-on-secret-change-reloader)
@@ -233,7 +233,7 @@ and rotation is self-driving:
 
 ```bash
 # Whatever rotates your Secret updates the value:
-kubectl patch secret mysite-fp-site-install \
+kubectl patch secret mysite-site-install \
   -p '{"stringData":{"admin_password":"new-value"}}'
 
 # Reloader rolls the Deployment → initContainer detects drift →
