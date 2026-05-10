@@ -16,7 +16,7 @@ WC log handlers) is **optional** and is the consumer site's responsibility.
 | [**SiteHealth**](#sitehealth) | Suppresses the Site Health tests whose failure is intentional under the immutable-image lockdown (`background_updates`, FS-write probes, `plugin_theme_auto_updates`) and adds a passing FrankenPress-branded test that explains why. Also adds an SMTP-reachability test when SMTPMailer is configured. |
 | [**SMTPMailer**](#smtpmailer) | Wires the global PHPMailer to send via SMTP from `FP_SMTP_*` env vars. The runtime image ships no MTA, so without this every `wp_mail()` call fails silently. Transport-agnostic (Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay). Opt-in: no-op when `FP_SMTP_HOST` is unset. |
 
-Composer name: `eightoeight/mu-plugin`. Latest release: `v0.5.0`.
+Composer name: `frankenpress/mu-plugin`. Latest release: `v0.5.0`.
 
 ## S3UploadsBootstrap
 
@@ -172,7 +172,7 @@ fight them.
 ## Install
 
 ```bash
-composer require eightoeight/mu-plugin
+composer require frankenpress/mu-plugin
 ```
 
 [`site-template`](/components/site-template) ships this dep

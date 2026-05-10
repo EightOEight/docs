@@ -48,8 +48,8 @@ gets registered, `wp_mail()` keeps falling through to broken `mail()`.
 | If your site image is built from… | Action |
 |---|---|
 | `site-template` (default) | Use **v0.2.4+**. Earlier tags don't include SMTPMailer. |
-| A fork of `site-template` | Bump `eightoeight/mu-plugin` in your `composer.json` to `^0.5.0`, run `composer update`, rebuild the site image, then point the chart at the new tag. |
-| A custom site image | Same — composer-install `eightoeight/mu-plugin: ^0.5.0` somewhere on the autoloader path. |
+| A fork of `site-template` | Bump `frankenpress/mu-plugin` in your `composer.json` to `^0.5.0`, run `composer update`, rebuild the site image, then point the chart at the new tag. |
+| A custom site image | Same — composer-install `frankenpress/mu-plugin: ^0.5.0` somewhere on the autoloader path. |
 
 You can confirm SMTPMailer is present in a running pod:
 
