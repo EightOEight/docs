@@ -24,7 +24,7 @@ flowchart TD
 <CardGroup cols={2}>
   <Card title="fp-runtime" icon="cube" href="/components/fp-runtime">
     Container image: Caddy + FrankenPHP + Souin compiled in. Published as
-    `ghcr.io/eightoeight/fp-runtime:php8.3`.
+    `ghcr.io/frankenpress/runtime:php8.3`.
   </Card>
   <Card title="fp-mu-plugin" icon="puzzle-piece" href="/components/fp-mu-plugin">
     Slim must-use plugin (4 components): S3 uploads bootstrap, Souin cache
@@ -36,7 +36,7 @@ flowchart TD
     minimal deps. Builds your site image on `git push --tags`.
   </Card>
   <Card title="fp-charts" icon="ship" href="/components/fp-charts">
-    Helm chart `fp-site`. Bitnami-style; bundles MariaDB + Redis + MinIO
+    Helm chart `site`. Bitnami-style; bundles MariaDB + Redis + MinIO
     for instant `kind` deploys.
   </Card>
 </CardGroup>
@@ -65,7 +65,7 @@ Souin caches GET responses in Redis. On `save_post`,
 `SouinInvalidator` connects directly to Redis and `DEL`s the relevant
 keys (Souin's documented HTTP-level invalidation APIs are broken in
 cache-handler v0.16.0 — see
-[`PHASE-0.md`](https://github.com/EightOEight/fp-runtime/blob/main/PHASE-0.md)
+[`PHASE-0.md`](https://github.com/frankenpress/runtime/blob/main/PHASE-0.md)
 for the investigation).
 
 ## Image promotion

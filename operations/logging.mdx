@@ -62,7 +62,7 @@ customConfig:
   sources:
     kubernetes:
       type: kubernetes_logs
-      extra_label_selector: "app.kubernetes.io/name=fp-site"
+      extra_label_selector: "app.kubernetes.io/name=site"
 
   transforms:
     parse_caddy_json:
@@ -116,7 +116,7 @@ and `resp_headers` fields.
 
 <Tip>
 Vector's `kubernetes_logs` source automatically picks up
-`app.kubernetes.io/name=fp-site` labels because the chart applies the
+`app.kubernetes.io/name=site` labels because the chart applies the
 standard Bitnami common labels. If you've overridden `nameOverride`,
 adjust the `extra_label_selector`.
 </Tip>
@@ -128,7 +128,7 @@ Alloy](https://grafana.com/docs/alloy/) (or its predecessor Promtail), no
 FrankenPress-specific config is needed. The default
 `discovery.kubernetes` + `loki.source.kubernetes` pipeline tails all pod
 logs in the cluster. Filter by namespace or by the
-`app.kubernetes.io/name=fp-site` label in your Alloy config to scope to
+`app.kubernetes.io/name=site` label in your Alloy config to scope to
 FrankenPress sites.
 
 ## Alternative: Datadog Agent (autodiscovery)
@@ -140,12 +140,12 @@ release:
 ```yaml
 podAnnotations:
   ad.datadoghq.com/site.logs: |
-    [{"source": "caddy", "service": "fp-site"}]
+    [{"source": "caddy", "service": "site"}]
 ```
 
 The `site` segment of the annotation key is the container name in the
 deployment template (it's not configurable). The Datadog Agent will
-auto-tag each line with `source:caddy` and `service:fp-site` so its
+auto-tag each line with `source:caddy` and `service:site` so its
 default Caddy log pipeline applies.
 
 ## What's not shipped
@@ -168,5 +168,5 @@ default Caddy log pipeline applies.
 |---|---|
 | Only startup chatter in stdout, no per-request lines | You're on an `fp-runtime` image older than the JSON-access-log change. Pull the latest tag and `helm upgrade`. |
 | WP debug entries missing from logs in staging | `WP_DEBUG_LOG` was overridden to `true` (writes to disk); confirm it resolves to `php://stderr` in your `config/environments/staging.php`. |
-| Vector / Alloy isn't seeing the pod's logs | Label selector mismatch — verify `app.kubernetes.io/name=fp-site` is present on the pod (`kubectl get pod -o yaml | grep -A1 labels`). |
+| Vector / Alloy isn't seeing the pod's logs | Label selector mismatch — verify `app.kubernetes.io/name=site` is present on the pod (`kubectl get pod -o yaml | grep -A1 labels`). |
 | Cache-Status header missing from access log lines | Souin only sets it on requests that flow through the `cache` directive. Logged-in / authenticated requests bypass cache by design and show no `Cache-Status`. |

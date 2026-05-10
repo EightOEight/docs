@@ -5,7 +5,7 @@ icon: "wrench"
 ---
 
 If you hit something not covered here,
-[open an issue](https://github.com/EightOEight/fp-charts/issues) — we
+[open an issue](https://github.com/frankenpress/charts/issues) — we
 treat docs gaps as real bugs.
 
 ## Pod symptoms
@@ -17,7 +17,7 @@ isn't loaded into the cluster.
 
 ```bash
 kind load docker-image <your-image>:<tag> --name <cluster-name>
-kubectl --namespace <ns> rollout restart deploy/<release>-fp-site
+kubectl --namespace <ns> rollout restart deploy/<release>-site
 ```
 
 ### `ImagePullBackOff` on `bitnami/*` images
@@ -50,7 +50,7 @@ content is stale beyond the TTL window:
 
 1. **Verify Redis connectivity** — exec into the site pod and try to ping Redis manually:
    ```bash
-   kubectl exec deploy/<release>-fp-site -- php -r 'echo (new Redis())->connect(getenv("FP_SOUIN_REDIS_HOST"), (int)getenv("FP_SOUIN_REDIS_PORT")) ? "ok" : "fail";'
+   kubectl exec deploy/<release>-site -- php -r 'echo (new Redis())->connect(getenv("FP_SOUIN_REDIS_HOST"), (int)getenv("FP_SOUIN_REDIS_PORT")) ? "ok" : "fail";'
    ```
 2. **Check the WP error log** — `error_log` lines from `[FrankenPress\\SouinInvalidator]` indicate connection or DEL failures.
 3. **Verify the cache key shape** — Souin uses `GET-<scheme>-<host>-<path>`. If the WP scheme/host returned by `home_url()` differs from what Souin sees on the request, the keys diverge. Set `WP_HOME` and `WP_SITEURL` to exactly the externally-visible URL (including scheme), and ensure the Ingress / HTTPRoute passes `X-Forwarded-Proto` correctly.
@@ -61,7 +61,7 @@ WordPress returned an empty response. Common causes:
 
 - **No theme installed** — `roots/wordpress` is no-content (no bundled themes). Make sure the site composer-installs at least one theme (`fp-site-template` ships `wpackagist-theme/twentytwentyfive` by default).
 - **PHP fatal during request** — check the site pod logs for stack traces.
-- **WP not yet installed** — the install Job hasn't completed yet (or is disabled). Check `kubectl --namespace <ns> get jobs` for the `<release>-fp-site-install` Job; tail the most recent pod's logs for the failure. If `siteInstall.enabled=false`, run `wp core install` manually via `kubectl exec`.
+- **WP not yet installed** — the install Job hasn't completed yet (or is disabled). Check `kubectl --namespace <ns> get jobs` for the `<release>-site-install` Job; tail the most recent pod's logs for the failure. If `siteInstall.enabled=false`, run `wp core install` manually via `kubectl exec`.
 
 ## S3 symptoms
 
@@ -74,7 +74,7 @@ uploads. The chart's ConfigMap is missing one of the required env vars
 Check:
 
 ```bash
-kubectl --namespace <ns> get configmap <release>-fp-site-env -o yaml | grep FP_S3
+kubectl --namespace <ns> get configmap <release>-site-env -o yaml | grep FP_S3
 ```
 
 For local kind dev with the bundled MinIO subchart, these are auto-set
@@ -116,7 +116,7 @@ no ACL header is sent. Bump:
 Confirm the deployed pod has no `FP_S3_OBJECT_ACL` set:
 
 ```bash
-kubectl --namespace <ns> get configmap <release>-fp-site-env -o yaml | grep FP_S3_OBJECT_ACL
+kubectl --namespace <ns> get configmap <release>-site-env -o yaml | grep FP_S3_OBJECT_ACL
 # Expected: no output
 ```
 
@@ -251,12 +251,12 @@ When you `kubectl port-forward` to `localhost:8080`, the browser sends
 Fix it by setting `site.url` to the URL you'll actually browse to:
 
 ```bash
-helm upgrade <release> oci://ghcr.io/eightoeight/charts/fp-site \
+helm upgrade <release> oci://ghcr.io/frankenpress/charts/site \
   --namespace <ns> --reuse-values \
   --set site.url=http://localhost:8080
 ```
 
-Wait for the rollout, then `port-forward svc/<release>-fp-site 8080:80`
+Wait for the rollout, then `port-forward svc/<release>-site 8080:80`
 and browse to `http://localhost:8080/`.
 
 For a real deploy, set `site.url` to your public URL and enable

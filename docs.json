@@ -52,7 +52,7 @@
       "anchors": [
         {
           "anchor": "GitHub",
-          "href": "https://github.com/EightOEight",
+          "href": "https://github.com/frankenpress",
           "icon": "github"
         }
       ]
@@ -66,11 +66,11 @@
     "links": [
       {
         "label": "fp-runtime",
-        "href": "https://github.com/EightOEight/fp-runtime"
+        "href": "https://github.com/frankenpress/runtime"
       },
       {
         "label": "fp-charts",
-        "href": "https://github.com/EightOEight/fp-charts"
+        "href": "https://github.com/frankenpress/charts"
       }
     ],
     "primary": {
@@ -93,7 +93,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/EightOEight"
+      "github": "https://github.com/frankenpress"
     }
   }
 }

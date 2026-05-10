@@ -39,7 +39,7 @@ CI builds and pushes `ghcr.io/<your-org>/<your-site>:v1.2.0`. Then in
 the cluster:
 
 ```bash
-helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm upgrade mysite oci://ghcr.io/frankenpress/charts/site \
   --namespace mysite \
   --reuse-values \
   --set image.tag=v1.2.0
@@ -59,7 +59,7 @@ The chart re-rolls the Deployment, draining old pods according to your
 ## What the post-upgrade install Job does
 
 Every `helm upgrade` (and the initial `helm install`) fires a
-post-upgrade hook Job named `<release>-fp-site-install`. The Job
+post-upgrade hook Job named `<release>-site-install`. The Job
 runs two things, both idempotent:
 
 1. `wp core is-installed` — short-circuits the install branch on every
@@ -82,7 +82,7 @@ kubectl --namespace <ns> get jobs --watch
 The Job uses `helm.sh/hook-delete-policy: hook-succeeded`, so the
 pod and Job object disappear after a successful run — read logs from
 the install pod *while it's running* (`kubectl logs -f
-job/<release>-fp-site-install`), or check `kubectl get events` for
+job/<release>-site-install`), or check `kubectl get events` for
 historical confirmation.
 
 If the Job fails, the upgrade fails too — the new Deployment still
@@ -94,7 +94,7 @@ from the install pod. The Job's `set -e` script bails fast and
 ## Chart upgrade
 
 ```bash
-helm upgrade mysite oci://ghcr.io/eightoeight/charts/fp-site \
+helm upgrade mysite oci://ghcr.io/frankenpress/charts/site \
   --version 0.5.0 \
   --namespace mysite \
   --reuse-values
@@ -108,9 +108,9 @@ install.
 
 Each repo publishes release notes on GitHub:
 
-- [`fp-runtime` releases](https://github.com/EightOEight/fp-runtime/releases)
-- [`fp-mu-plugin` releases](https://github.com/EightOEight/fp-mu-plugin/releases)
-- [`fp-charts` releases](https://github.com/EightOEight/fp-charts/releases)
+- [`fp-runtime` releases](https://github.com/frankenpress/runtime/releases)
+- [`fp-mu-plugin` releases](https://github.com/frankenpress/mu-plugin/releases)
+- [`fp-charts` releases](https://github.com/frankenpress/charts/releases)
 - (your `fp-site-template` fork's releases for site-specific changes)
 
 Breaking changes are flagged at the top of each release. Treat any
