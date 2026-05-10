@@ -103,13 +103,15 @@ by FrankenPress:
   </Step>
   <Step title="Install WordPress">
     ```bash
-    make wp -- core install \
+    make wp ARGS="core install \
       --url=http://localhost:8080 \
-      --title="My Site" \
+      --title='My Site' \
       --admin_user=admin \
       --admin_email=admin@example.com \
-      --admin_password=admin
+      --admin_password=admin \
+      --skip-email"
     ```
+
     Visit `http://localhost:8080/wp/wp-admin/` and log in.
 
     <Note>
@@ -119,6 +121,14 @@ by FrankenPress:
       Job — that's a Helm-only mechanism, so the local Compose stack
       still needs the manual command above.
     </Note>
+
+    <Tip>
+      `make wp` injects `--allow-root --path=/app/web/wp` into every
+      invocation — WordPress core lives at `web/wp/` per the Bedrock
+      layout, so wp-cli won't auto-discover it from the container's
+      default working directory. Pass your sub-command + flags through
+      `ARGS="…"`.
+    </Tip>
   </Step>
 </Steps>
 
