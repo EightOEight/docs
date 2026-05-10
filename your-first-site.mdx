@@ -116,14 +116,19 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     Install WordPress (one-time, on first boot):
 
     ```bash
-    make wp -- core install \
+    make wp ARGS="core install \
       --url=http://localhost:8080 \
-      --title="My site" \
+      --title='My Site' \
       --admin_user=admin \
       --admin_email=admin@example.com \
       --admin_password=admin \
-      --skip-email
+      --skip-email"
     ```
+
+    The `make wp` recipe runs wp-cli in the site container with
+    `--allow-root --path=/app/web/wp` (WordPress core lives under
+    `web/wp/` per the Bedrock layout — wp-cli won't find it otherwise).
+    Pass your sub-command + flags through `ARGS="…"`.
 
     Open `http://localhost:8080/wp/wp-admin/` and log in.
 
@@ -188,7 +193,7 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     kubectl config use-context kind-myfp
 
     helm install mysite oci://ghcr.io/frankenpress/charts/site \
-      --version 0.5.0 \
+      --version 0.7.0 \
       --namespace mysite --create-namespace \
       --set image.repository=ghcr.io/<owner>/mysite \
       --set image.tag=v0.1.0 \
