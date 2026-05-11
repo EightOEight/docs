@@ -36,7 +36,7 @@ only) and PHP errors on stderr. Shipping setup is in [Logging](/operations/loggi
 | `FP_S3_BUCKET_URL` | — | optional CDN URL |
 | `FP_S3_ENDPOINT` | — | optional, for non-AWS S3-compatible (MinIO, R2, GCS XML) |
 | `FP_S3_OBJECT_ACL` | (empty — no ACL) | optional S3 object ACL. Leave unset for buckets with **Object Ownership = "Bucket owner enforced"** (the AWS new-bucket default since April 2023). Set to `public-read` / `private` / `authenticated-read` only for ACL-enabled buckets. |
-| `FP_S3_DISABLED` | `false` | truthy → skip the bootstrap (**local dev only**) |
+| `FP_S3_DISABLED` | auto: on in-cluster, off out-of-cluster | tri-state. Truthy (`1`/`true`/`yes`/`on`) → off. Falsy (`0`/`false`/`no`/`off`) → force on. Unset → default gates on `KUBERNETES_SERVICE_HOST` (kubelet-injected on every pod): production stays on, local dev skips the `s3://` stream wrapper so admin install flows hit local disk. Force on locally with `FP_S3_DISABLED=0`. |
 
 When required vars are missing, the bootstrap registers
 `wp_handle_upload_prefilter` to **refuse uploads** with a clear error
