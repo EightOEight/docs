@@ -22,8 +22,10 @@ Composer name: `frankenpress/mu-plugin`. Latest release: `v0.5.0`.
 
 Maps `FP_S3_*` env vars to humanmade/s3-uploads' `S3_UPLOADS_*` constants
 and auto-loads the s3-uploads plugin from composer's vendor / plugins
-dir. **Refuses media uploads** via `wp_handle_upload_prefilter` when
-required env vars are missing.
+dir. In-cluster, **refuses media uploads** via `wp_handle_upload_prefilter`
+when required env vars are missing. Out-of-cluster (no
+`KUBERNETES_SERVICE_HOST`), the bootstrap auto-skips entirely and
+WordPress writes to local disk — see `FP_S3_DISABLED` below.
 
 ### Why refuse rather than fall back?
 
@@ -32,6 +34,14 @@ restart) and **inconsistent across replicas** (write to pod A, read from
 pod B → 404). Silently writing uploads to local disk would produce
 broken behaviour that surfaces minutes-to-hours later. A hard upload
 failure surfaces the misconfiguration immediately.
+
+Out-of-cluster (docker-compose, bare local) those concerns don't
+apply: there's one container, the disk persists for the lifetime of
+the volume, and admin install flows (premium-theme demo importers
+etc.) need a real writable path because the `s3://` stream wrapper
+doesn't support every `ZipArchive` / `unzip_file` operation. The
+bootstrap auto-skips out-of-cluster for that reason. Force it back on
+with `FP_S3_DISABLED=0` to exercise the S3 path against MinIO.
 
 ### Env vars
 
@@ -44,7 +54,7 @@ failure surfaces the misconfiguration immediately.
 | `FP_S3_BUCKET_URL` | — | optional CDN URL — auto-sets `WP_CONTENT_URL` if undefined |
 | `FP_S3_ENDPOINT` | — | optional, for non-AWS S3-compatible (MinIO, R2, GCS XML) |
 | `FP_S3_OBJECT_ACL` | (empty — no ACL) | optional S3 object ACL. Leave unset for buckets with Object Ownership = "Bucket owner enforced" (the AWS default since April 2023, ACLs disabled). Set to `public-read` / `private` / `authenticated-read` only for ACL-enabled buckets. See [troubleshooting → 0-byte uploads](/operations/troubleshooting#0-byte-uploads-to-s3). |
-| `FP_S3_DISABLED` | `false` | truthy → skip the bootstrap entirely (**local dev only — never in production**) |
+| `FP_S3_DISABLED` | auto: on in-cluster, off out-of-cluster | tri-state. Truthy (`1`/`true`/`yes`/`on`) → off. Falsy (`0`/`false`/`no`/`off`) → force on. Unset → default gates on `KUBERNETES_SERVICE_HOST` (kubelet-injected on every pod): production stays on, local dev skips the `s3://` stream wrapper so admin install flows hit local disk. Force on locally with `FP_S3_DISABLED=0`. |
 
 ### Endpoint filter (v0.1.1)
 
