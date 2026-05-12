@@ -5,9 +5,10 @@ icon: "puzzle-piece"
 ---
 
 [`mu-plugin`](https://github.com/frankenpress/mu-plugin) is the
-WordPress-side glue for the FrankenPress stack. Four components, all
-platform-housekeeping — anything else (URL fixers, object cache, metrics,
-WC log handlers) is **optional** and is the consumer site's responsibility.
+WordPress-side glue for the FrankenPress stack. Four request-path
+components plus one off-request-path WP-CLI surface, all platform-
+housekeeping — anything else (URL fixers, object cache, metrics, WC
+log handlers) is **optional** and is the consumer site's responsibility.
 
 | Component | What it does |
 |---|---|
@@ -15,8 +16,9 @@ WC log handlers) is **optional** and is the consumer site's responsibility.
 | [**SouinInvalidator**](#souininvalidator) | `DEL`s Souin's Redis cache entries directly on `save_post`, `clean_post_cache`, `switch_theme`, etc. — bypasses cache-handler's broken HTTP invalidation. |
 | [**SiteHealth**](#sitehealth) | Suppresses the Site Health tests whose failure is intentional under the immutable-image lockdown (`background_updates`, FS-write probes, `plugin_theme_auto_updates`) and adds a passing FrankenPress-branded test that explains why. Also adds an SMTP-reachability test when SMTPMailer is configured. |
 | [**SMTPMailer**](#smtpmailer) | Wires the global PHPMailer to send via SMTP from `FP_SMTP_*` env vars. The runtime image ships no MTA, so without this every `wp_mail()` call fails silently. Transport-agnostic (Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay). Opt-in: no-op when `FP_SMTP_HOST` is unset. |
+| [**`wp fp` CLI**](#wp-fp-cli) *(WP-CLI only)* | Registers `wp fp snapshot` + `wp fp apply` subcommands for the [designer flow](/designer-flow). Adapter-scoped, WXR-based, additive. Schema `fp.snapshot/v3`. Only loads under `WP_CLI` — zero overhead on web requests. |
 
-Composer name: `frankenpress/mu-plugin`. Latest release: `v0.5.0`.
+Composer name: `frankenpress/mu-plugin`. Latest release: `v0.10.0`.
 
 ## S3UploadsBootstrap
 
@@ -37,11 +39,11 @@ failure surfaces the misconfiguration immediately.
 
 Out-of-cluster (docker-compose, bare local) those concerns don't
 apply: there's one container, the disk persists for the lifetime of
-the volume, and admin install flows (premium-theme demo importers
-etc.) need a real writable path because the `s3://` stream wrapper
-doesn't support every `ZipArchive` / `unzip_file` operation. The
-bootstrap auto-skips out-of-cluster for that reason. Force it back on
-with `FP_S3_DISABLED=0` to exercise the S3 path against MinIO.
+the volume, and admin install flows (block-plugin installers, theme
+zip uploads) need a real writable path because the `s3://` stream
+wrapper doesn't support every `ZipArchive` / `unzip_file` operation.
+The bootstrap auto-skips out-of-cluster for that reason. Force it
+back on with `FP_S3_DISABLED=0` to exercise the S3 path against MinIO.
 
 ### Env vars
 
@@ -178,6 +180,45 @@ config — those plugins run as regular plugins after must-use plugins
 and re-hook `phpmailer_init` at the same priority. Last-writer wins.
 Correct behaviour: the user opted into the plugin explicitly; we don't
 fight them.
+
+## wp fp CLI
+
+Off the request path — loads only under `WP_CLI`. Zero overhead on
+web requests. Provides the two subcommands the [designer
+flow](/designer-flow) relies on:
+
+```bash
+# Capture local state into web/imports/<slug>/
+wp fp snapshot --slug=<slug> [--note='<text>'] [--output-dir=<path>]
+
+# Apply a snapshot directory to the current site
+wp fp apply --snapshot-dir=<path>
+```
+
+**Adapter-scoped, WXR-based, additive.** The bundled `Fse` adapter
+detects when the active theme is an FSE block theme
+(`wp_is_block_theme()`) and declares scope: `wp_template`,
+`wp_template_part`, `wp_global_styles`, `wp_navigation`, `attachment`,
+`page`, `post`, plus a curated `option_keys` list (`blogname`,
+`show_on_front`, etc.) and `theme_mods` for the active stylesheet.
+Anything outside that scope — WooCommerce orders, user accounts,
+comments, custom CPTs — is structurally inaccessible to the snapshot.
+
+**Apply is additive.** WP-Importer matches by GUID and only INSERTs
+(no DROP, no DELETE, no TRUNCATE). The Fse adapter's `post_apply()`
+hook sweeps `wp_global_styles` orphans whose stylesheet doesn't
+match the current `get_stylesheet()` — snapshot-managed metadata
+cleanup on theme switch, not UGC deletion.
+
+**Idempotent.** Apply stamps `fp_snapshot_applied_ref` and
+`fp_snapshot_applied_sha256` options on success; subsequent invocations
+with the same snapshot short-circuit (`Success: apply skipped`).
+
+Schema: `fp.snapshot/v3`. Earlier `v2` snapshots are rejected by the
+Restorer — re-capture under a `v0.10.0+` install to migrate.
+
+For the full workflow (Site Editor → snapshot → commit → deploy), see
+[Designer flow](/designer-flow).
 
 ## Install
 

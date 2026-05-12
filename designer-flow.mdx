@@ -1,0 +1,232 @@
+---
+title: "Designer flow"
+description: "Design FSE block themes locally, capture state via `wp fp snapshot`, ship via the same image-build path as code."
+icon: "palette"
+---
+
+FrankenPress sites are designed locally in WP Site Editor against an
+FSE block theme, captured into a versioned snapshot, and promoted
+through git the same way code changes are. No click-ops on production,
+no admin-side imports, no premium-theme bake-and-pray.
+
+The mental model: **design is data, code is code, both live in the
+image as immutable artefacts**. The site image carries
+`web/imports/<slug>/` snapshot directories alongside the WordPress
+core and theme files; the chart's install Job applies them on every
+helm upgrade.
+
+## What this is for
+
+| | |
+|---|---|
+| Theme code | composer-installed, in the image |
+| Designer-built `wp_template`, `wp_template_part`, `wp_global_styles`, `wp_navigation` | captured by snapshot, in the image |
+| Site-identity options (`blogname`, `show_on_front`, etc.) | captured by snapshot, in the image |
+| Uploaded media (`attachment` post type) | captured by snapshot; the binaries themselves land in S3 |
+| User-generated content (orders, comments, customer accounts) | **never captured**, lives only in the runtime DB |
+
+## What it's not
+
+- A backup system. UGC is structurally outside snapshot scope — restoring a snapshot doesn't restore orders or comments.
+- A premium-theme tool. FrankenPress dropped premium-theme adapters in mu-plugin v0.10.0. Classic-mode themes that need post-install regen hooks, theme-bundled plugins, or Options Frameworks aren't supported by the designer flow.
+- A "design once, sync forever" loop. WP-Importer matches by GUID and skips existing posts; the snapshot model is additive-on-first-apply, not bidirectional sync.
+
+## Designers operate as admins
+
+Designers use the local docker-compose stack as full WordPress admins.
+The safety boundary is the **immutable image + in-cluster lockdown**,
+not WP roles. In-cluster, `DISALLOW_FILE_EDIT` and `DISALLOW_FILE_MODS`
+block theme edits and plugin installs for everyone, admins included.
+Locally, designers have full latitude to install block plugins,
+evaluate themes, or break things — local state is throwaway.
+
+The controlled promotion path is the PR + image-build + gitops bump,
+not a WordPress capability check.
+
+## The workflow
+
+<Steps>
+  <Step title="Bring up the local stack">
+    ```bash
+    git clone git@github.com:<your-org>/<your-site>.git
+    cd <your-site>
+    make setup    # composer install + .env
+    make up       # docker compose up (site + db + redis + minio)
+    ```
+
+    `curl http://localhost:8080/healthz` returns `ok` once Caddy is up.
+  </Step>
+
+  <Step title="Install WordPress (fresh DBs only)">
+    ```bash
+    make wp ARGS="core install \
+      --url=http://localhost:8080 \
+      --title='Your Site' \
+      --admin_user=admin \
+      --admin_email=admin@example.com \
+      --admin_password=admin \
+      --skip-email"
+    ```
+
+    Default FSE theme (`twentytwentyfive`) is activated automatically
+    on fresh installs.
+  </Step>
+
+  <Step title="Design in Site Editor">
+    Log in at `http://localhost:8080/wp/wp-admin/`. Open
+    **Appearance → Editor**. Edit templates, template parts, global
+    styles, and navigation. Upload media. Create pages/posts.
+
+    Settings you'll typically also touch under **Settings → General**:
+    `Site Title`, `Tagline`, and the front-page configuration
+    (`Reading → Your homepage displays`).
+  </Step>
+
+  <Step title="Capture the snapshot">
+    ```bash
+    make wp ARGS="fp snapshot --slug=<slug> --note='<freeform note>'"
+    ```
+
+    Writes `web/imports/<slug>/` containing:
+
+    - `manifest.yaml` + `manifest.json` — `fp.snapshot/v3` manifest, the same data in two forms.
+    - `content.xml.gz` — WXR of every captured post.
+    - `options.json` — scoped `wp_options` + `theme_mods_<stylesheet>`.
+    - `uploads-manifest.txt` — sha256 + size per file in the uploads dir.
+
+    Re-running with the same `--slug` overwrites cleanly.
+
+    The bundled `Fse` adapter captures these CPTs in full:
+    `wp_template`, `wp_template_part`, `wp_global_styles`,
+    `wp_navigation`, `attachment`, `page`, `post`. Options captured:
+    `blogname`, `blogdescription`, `show_on_front`, `page_on_front`,
+    `page_for_posts`, `permalink_structure`, `site_icon`, `site_logo`,
+    `custom_logo`. Theme mods captured for the active stylesheet.
+  </Step>
+
+  <Step title="Commit and tag">
+    ```bash
+    git checkout -b feat/<slug>
+    git add web/imports/<slug>/
+    git commit -m "Snapshot: <description>"
+    git push -u origin feat/<slug>
+    # → PR → merge → tag → CI builds and pushes
+    #   ghcr.io/<your-org>/<your-site>:vX.Y.Z
+    ```
+  </Step>
+
+  <Step title="Deploy">
+    Bump `imageTag` in your GitOps overlay (or `helm upgrade --set
+    image.tag=vX.Y.Z` for vanilla Helm). The chart's install Job runs
+    `wp fp apply --snapshot-dir=/app/web/imports/<slug>` on every
+    helm upgrade. Idempotent.
+  </Step>
+</Steps>
+
+## What apply does
+
+The chart's install Job iterates every subdirectory of
+`/app/web/imports/` whose `manifest.json` exists and runs
+`wp fp apply` per snapshot. For each snapshot:
+
+1. **Schema check.** Reject if not `fp.snapshot/v3`.
+2. **Idempotency check.** Compare `manifest.id` and `wxr_sha256`
+   against the `fp_snapshot_applied_ref` / `_sha256` options. Match
+   → skip (`Success: apply skipped`).
+3. **Transient WP-Importer install.** If WP-Importer isn't on disk
+   (the FrankenPress site image doesn't ship it by default), the
+   install Job's RW overlay filesystem allows
+   `wp plugin install wordpress-importer --activate` to land it
+   transiently. The plugin is deactivated at teardown so the next
+   web Pod (read-only filesystem) doesn't try to load a missing
+   plugin file.
+4. **WXR import.** Posts INSERT-only via `wp import` running as a
+   fresh subprocess (avoids a `WP_CLI::runcommand` deadlock specific
+   to the `import` command).
+5. **Options apply.** `update_option(key, value)` for each scoped
+   key. Theme mods written directly to `theme_mods_<stylesheet>`.
+6. **URL retarget.** `wp search-replace <source_url> <target_url>
+   --all-tables --report-changed-only`.
+7. **Adapter `post_apply()`.** The `Fse` adapter sweeps
+   `wp_global_styles` rows whose stylesheet metadata doesn't match
+   the current `get_stylesheet()` (theme-switch cleanup).
+8. **Markers stamped.** `fp_snapshot_applied_ref` +
+   `fp_snapshot_applied_sha256` — subsequent re-applies short-circuit.
+
+## Safety properties
+
+- **Additive WXR.** WP-Importer only INSERTs. Existing posts matched by GUID are skipped (not overwritten). No DROP, no DELETE, no TRUNCATE anywhere in the apply path.
+- **Scoped options.** Only the adapter's declared `option_keys` are touched. Anything not in that list is invisible to the apply.
+- **UGC is structurally inaccessible.** WooCommerce `wc_orders`, `wp_users`, `wp_comments`, and `wp_*meta` for posts outside scope are not in any adapter's scope, so they can never enter or be modified by a snapshot.
+- **`wp_global_styles` orphan deletion is scoped.** The Fse adapter deletes only `wp_global_styles` rows it owns (the CPT is in its declared scope). UGC outside that CPT is untouchable.
+
+## Iteration
+
+Designer iteration on existing FSE templates is one-shot, not
+bidirectional. WP-Importer matches by GUID and skips existing posts —
+re-applying a snapshot that updates an existing template doesn't
+propagate the change. For now, the iteration pattern is:
+
+1. Capture the new design with a new `--slug=<v2>`.
+2. On the target, manually delete the prior version's `wp_template`
+   row (or the whole `web/imports/<v1>/` directory + re-apply).
+3. Apply the new snapshot.
+
+This is a known limitation; the additive-only WXR semantics that
+protect UGC are what prevent simple updates from propagating.
+
+## Common questions
+
+<AccordionGroup>
+  <Accordion title="My snapshot's `blogname` is wrong. Re-capture or edit the option later?" icon="pen-to-square">
+    Both work. Re-capturing keeps the snapshot self-contained
+    (recommended). Edit-after-deploy via `wp option update blogname
+    "X"` works as a one-off but the snapshot's `blogname` value will
+    overwrite it on the next apply unless `fp_snapshot_applied_*`
+    markers match.
+  </Accordion>
+
+  <Accordion title="Can I capture a snapshot from production?" icon="circle-question">
+    Technically yes (`wp fp snapshot` runs anywhere WP-CLI runs), but
+    production captures will pick up customer-edited templates +
+    customer-uploaded media you may not want in the image. Local
+    capture from a designer-controlled stack is the canonical flow.
+  </Accordion>
+
+  <Accordion title="What about classic (non-FSE) themes?" icon="palette">
+    The shipping `Fse` adapter detects via `wp_is_block_theme()`;
+    classic themes won't trigger it. `wp fp snapshot` errors out with
+    "no snapshot adapter detected." A site that genuinely needs a
+    classic-theme adapter can register one against the existing
+    `AdapterInterface` — but the slim mu-plugin baseline ships only
+    Fse, and adding a second registered adapter requires explicit
+    user approval per the mu-plugin slim-by-default contract.
+  </Accordion>
+
+  <Accordion title="The snapshot directory has my designer's site URL baked in" icon="globe">
+    Yes — `manifest.source.site_url` records the URL the snapshot was
+    captured against (typically `http://localhost:8080`). On apply,
+    the Restorer runs `wp search-replace` from that source URL to the
+    target's `home_url()` across all tables (only the snapshot-
+    imported rows are touched in practice, since the existing site's
+    rows already reference the target URL).
+  </Accordion>
+
+  <Accordion title="How do I roll back a snapshot apply?" icon="rotate-left">
+    The forward path is image-versioned. Roll back by deploying an
+    earlier image tag whose `web/imports/` didn't contain the
+    snapshot. The snapshot-imported posts will still exist in the DB
+    (additive — apply doesn't delete on rollback), but no apply runs
+    against the missing snapshot directory so no further changes
+    land. For a full content rollback, restore from your MariaDB
+    backup.
+  </Accordion>
+</AccordionGroup>
+
+## Companion repos
+
+| Repo | Role in the designer flow |
+|---|---|
+| [`mu-plugin`](https://github.com/frankenpress/mu-plugin) | Ships the `Fse` adapter + `wp fp snapshot` + `wp fp apply` WP-CLI subcommands. v0.10.0+. |
+| [`site-template`](https://github.com/frankenpress/site-template) | What you forked from. `web/imports/.gitkeep` is the placeholder for committed snapshots. |
+| [`charts`](https://github.com/frankenpress/charts) | Install Job iterates `web/imports/<slug>/` directories on every helm upgrade. v0.10.0+. |
