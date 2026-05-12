@@ -1,6 +1,6 @@
 ---
 title: "Designer flow"
-description: "Design FSE block themes locally, capture state via `wp fp snapshot`, ship via the same image-build path as code."
+description: "Design FSE block themes locally, capture state via `fp snapshot`, ship via the same image-build path as code."
 icon: "palette"
 ---
 
@@ -73,6 +73,21 @@ not a WordPress capability check.
 
 ## The workflow
 
+<Note>
+  **Prerequisite — install `fp` once.** The capture step uses the host-side
+  [`fp`](https://github.com/frankenpress/fp) CLI, which wraps the mu-plugin's
+  `wp fp snapshot` and extracts the result. Install via the FrankenPress
+  Homebrew tap:
+
+  ```bash
+  brew install frankenpress/tap/fp
+  ```
+
+  No-brew fallbacks: `go install github.com/frankenpress/fp/cmd/fp@latest`,
+  or grab a binary from [Releases](https://github.com/frankenpress/fp/releases).
+  Verify with `fp version`.
+</Note>
+
 <Steps>
   <Step title="Bring up the local stack">
     ```bash
@@ -114,9 +129,24 @@ not a WordPress capability check.
   </Step>
 
   <Step title="Capture the snapshot">
+    From the site repo root (or any subdirectory — `fp` walks up to find
+    `frankenpress.toml` or `composer.json`):
+
     ```bash
-    make wp ARGS="fp snapshot --slug=<slug> --note='<freeform note>'"
+    fp snapshot
     ```
+
+    `fp` prompts twice:
+
+    - **slug** — suggests the last one used, your git branch (minus `feat/`
+      etc.), or a composer-derived default. Enter accepts the suggestion.
+    - **note** — opens `$EDITOR` if set + interactive; otherwise reads a
+      single line from stdin. Empty notes are allowed.
+
+    Both can be supplied as flags (`--slug <s>` / `--note <s>` /
+    `--note-file <path>`) to skip prompting. `--quick` skips everything,
+    uses a timestamped slug, and does not update `.fp/state.json` — useful
+    for ad-hoc / scripted captures.
 
     Writes `web/imports/<slug>/`:
 
@@ -130,7 +160,13 @@ not a WordPress capability check.
     | `content.xml.gz` | WXR — typically empty for FSE sites (page/post are out of scope) |
     | `uploads-manifest.txt` | sha256 + size audit log of the entire uploads dir |
 
-    Re-running with the same `--slug` overwrites cleanly.
+    Re-running on the same slug pre-cleans the host target then re-captures
+    cleanly. If the target directory has uncommitted git changes, `fp` will
+    ask before overwriting — pass `--quick` to bypass that guard.
+
+    Behind the scenes `fp` shells `docker compose exec site wp fp snapshot
+    ...` and `docker cp` to extract; if the stack isn't running it prints
+    a `make up` hint and exits.
   </Step>
 
   <Step title="Commit and tag">
@@ -307,6 +343,7 @@ is never touched by the designer's pipeline.
 
 | Repo | Role in the designer flow |
 |---|---|
+| [`fp`](https://github.com/frankenpress/fp) | Host-side CLI. `fp snapshot` wraps the mu-plugin's `wp fp snapshot` + the post-capture `docker cp` extraction, with interactive slug + note prompts. Installed via the [`homebrew-tap`](https://github.com/frankenpress/homebrew-tap). |
 | [`mu-plugin`](https://github.com/frankenpress/mu-plugin) | Ships the `Fse` adapter + `wp fp snapshot` + `wp fp apply`. v0.12.0+ ships the design/content scope split + designer-asset attachment shipping (option-ref + block-scan). v0.12.2+ includes the apply-side uploads URL retarget. |
 | [`site-template`](https://github.com/frankenpress/site-template) | What you forked from. `web/imports/.gitkeep` is the placeholder for committed snapshots. |
 | [`charts`](https://github.com/frankenpress/charts) | Install Job iterates `web/imports/<slug>/` directories on every helm upgrade. v0.10.0+ provides RW root FS on the install Job for transient WP-Importer install. |

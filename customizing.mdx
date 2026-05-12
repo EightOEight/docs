@@ -431,9 +431,10 @@ different theme first.
     `wp_global_styles`, navigation menus, plus designer-uploaded
     media and site-identity options — is promoted via the
     [designer flow](/designer-flow): design locally on
-    docker-compose, capture with `wp fp snapshot`, commit
-    `web/imports/<slug>/`, tag, deploy. Additive on apply (existing
-    UGC is never touched).
+    docker-compose, capture with `fp snapshot` (host-side CLI that
+    wraps the mu-plugin's `wp fp snapshot` and extracts the result),
+    commit `web/imports/<slug>/`, tag, deploy. Additive on apply
+    (existing UGC is never touched).
   </Accordion>
 
   <Accordion title="Premium / classic themes (ThemeForest, etc.)" icon="lock">
