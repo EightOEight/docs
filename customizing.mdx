@@ -426,20 +426,29 @@ different theme first.
     `image` matches the tag you bumped to in GitOps.
   </Accordion>
 
-  <Accordion title="Premium / non-WordPress.org themes (and plugins)" icon="lock">
-    Premium themes and plugins (ThemeForest, Envato, self-hosted)
-    aren't on Composer registries and routinely ship admin-side
-    actions (demo importers, in-WP updaters, plugin bundlers) that
-    collide with the FrankenPress lockdown. The full recipe —
-    install via commit-direct, auto-activate via the chart, harden
-    wp-admin against click-ops, promote staging → production —
-    lives in [Premium themes](/premium-themes), with The7 as the
-    worked example end-to-end.
+  <Accordion title="Designer-built content (templates, global styles, navigation)" icon="palette">
+    Site Editor output — block templates, template parts,
+    `wp_global_styles`, navigation menus, plus designer-uploaded
+    media and site-identity options — is promoted via the
+    [designer flow](/designer-flow): design locally on
+    docker-compose, capture with `wp fp snapshot`, commit
+    `web/imports/<slug>/`, tag, deploy. Additive on apply (existing
+    UGC is never touched).
+  </Accordion>
 
-    The Composer-only path (private VCS / Satis / Packagist Server)
-    also works if you have an existing private registry; see the
-    [Roots Bedrock Composer guide](https://roots.io/bedrock/docs/composer/)
-    for that pattern.
+  <Accordion title="Premium / classic themes (ThemeForest, etc.)" icon="lock">
+    Not supported by the designer flow. FrankenPress dropped premium-
+    theme adapters in mu-plugin v0.10.0 — classic-mode themes that
+    rely on Options Frameworks, post-install regen hooks, or theme-
+    bundled plugins collide with the immutable-image lockdown in
+    ways that took ~10 fix cycles per theme to work around. If you
+    have an existing private Composer registry (VCS / Satis /
+    Packagist Server), the theme code itself can still ship as a
+    Composer-installed dependency the same way wpackagist themes do
+    — see the
+    [Roots Bedrock Composer guide](https://roots.io/bedrock/docs/composer/).
+    The designer-side automation (snapshot/apply) only supports
+    FSE-mode themes.
   </Accordion>
 </AccordionGroup>
 
