@@ -18,7 +18,7 @@ log handlers) is **optional** and is the consumer site's responsibility.
 | [**SMTPMailer**](#smtpmailer) | Wires the global PHPMailer to send via SMTP from `FP_SMTP_*` env vars. The runtime image ships no MTA, so without this every `wp_mail()` call fails silently. Transport-agnostic (Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay). Opt-in: no-op when `FP_SMTP_HOST` is unset. |
 | [**`wp fp` CLI**](#wp-fp-cli) *(WP-CLI only)* | Registers `wp fp snapshot` + `wp fp apply` subcommands for the [designer flow](/designer-flow). Adapter-scoped, WXR-based, additive. Schema `fp.snapshot/v3`. Only loads under `WP_CLI` — zero overhead on web requests. |
 
-Composer name: `frankenpress/mu-plugin`. Latest release: `v0.10.0`.
+Composer name: `frankenpress/mu-plugin`. Latest release: `v0.12.2`.
 
 ## S3UploadsBootstrap
 
@@ -195,27 +195,51 @@ wp fp snapshot --slug=<slug> [--note='<text>'] [--output-dir=<path>]
 wp fp apply --snapshot-dir=<path>
 ```
 
-**Adapter-scoped, WXR-based, additive.** The bundled `Fse` adapter
-detects when the active theme is an FSE block theme
-(`wp_is_block_theme()`) and declares scope: `wp_template`,
-`wp_template_part`, `wp_global_styles`, `wp_navigation`, `attachment`,
-`page`, `post`, plus a curated `option_keys` list (`blogname`,
-`show_on_front`, etc.) and `theme_mods` for the active stylesheet.
-Anything outside that scope — WooCommerce orders, user accounts,
-comments, custom CPTs — is structurally inaccessible to the snapshot.
+**Adapter-scoped, design-only, ID-stable.** The bundled `Fse`
+adapter detects when the active theme is an FSE block theme
+(`wp_is_block_theme()`) and declares scope:
 
-**Apply is additive.** WP-Importer matches by GUID and only INSERTs
-(no DROP, no DELETE, no TRUNCATE). The Fse adapter's `post_apply()`
-hook sweeps `wp_global_styles` orphans whose stylesheet doesn't
-match the current `get_stylesheet()` — snapshot-managed metadata
-cleanup on theme switch, not UGC deletion.
+- **Owned post types** (templates.json, **upsert** by slug):
+  `wp_template`, `wp_template_part`, `wp_global_styles`,
+  `wp_navigation`
+- **Option keys** (options.json, upsert): `blogname`,
+  `blogdescription`, `show_on_front`, `page_on_front`,
+  `page_for_posts`, `permalink_structure`, `site_icon`,
+  `site_logo`, `custom_logo`
+- **Attachment refs** (attachments.json + binaries): attachments
+  referenced by the logo options OR by inline `<!-- wp:image
+  {"id":N} -->` block markup inside captured owned posts. Other
+  uploads are skipped — they're treated as content.
+- **Theme mods**: for the active stylesheet only
+
+**Pages and posts are intentionally OUT of scope** — they're
+content the editor publishes live, not design state the designer
+ships. Anything else (WooCommerce orders, user accounts, comments,
+custom CPTs not declared) is structurally inaccessible.
+
+**Apply is upsert-by-key.** Owned posts upsert by
+`post_name + post_type` so designer iteration on existing
+templates propagates. Attachments upsert by `_wp_attached_file`
+(the relative path under `uploads/`, which is stable across
+environments). Options upsert by key. The captured-ID → local-ID
+remap rewrites `site_logo` values + inline block-attr `"id":N`
+references + `wp-image-N` CSS classes during apply so attachment
+references land pointing at the right local post.
+
+**Binaries ship in the snapshot.** Designer-asset attachments
+travel as bundled files in `snapshot/uploads/<rel-path>/`. At
+apply time, files are copied into `wp_get_upload_dir()['basedir']`
+— with `S3UploadsBootstrap` active that's an `s3://` stream
+wrapper write so files land directly in S3.
 
 **Idempotent.** Apply stamps `fp_snapshot_applied_ref` and
-`fp_snapshot_applied_sha256` options on success; subsequent invocations
-with the same snapshot short-circuit (`Success: apply skipped`).
+`fp_snapshot_applied_sha256` options on success; subsequent
+invocations with the same snapshot short-circuit (`Success:
+apply skipped`).
 
-Schema: `fp.snapshot/v3`. Earlier `v2` snapshots are rejected by the
-Restorer — re-capture under a `v0.10.0+` install to migrate.
+Schema: `fp.snapshot/v4`. Earlier `v2` / `v3` snapshots are
+rejected by the Restorer — re-capture under a `v0.11.0+` install
+to migrate.
 
 For the full workflow (Site Editor → snapshot → commit → deploy), see
 [Designer flow](/designer-flow).
