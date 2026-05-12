@@ -252,10 +252,11 @@ is never touched by the designer's pipeline.
   <Accordion title="Why are uploaded images in my Media Library NOT shipping?" icon="image">
     The capturer only ships attachments **referenced by design state**
     — site logos (via `site_logo` / `site_icon` / `custom_logo`
-    options) and inline block-image references (`<!-- wp:image
-    {"id":N} -->`) inside captured templates. Uploads sitting in the
-    Media Library that aren't referenced anywhere are treated as
-    content (editor-managed) and stay local.
+    options) and inline `wp:image` block references inside captured
+    templates (an image block carries an `"id":N` attribute pointing
+    at the attachment). Uploads sitting in the Media Library that
+    aren't referenced anywhere are treated as content
+    (editor-managed) and stay local.
 
     To ship a designer asset: either set it as a logo, or place it
     via Site Editor inside a template, template part, or global
@@ -263,13 +264,18 @@ is never touched by the designer's pipeline.
   </Accordion>
 
   <Accordion title="What does the URL retarget actually do for images?" icon="globe">
-    Block markup like `<!-- wp:image {"id":42,"url":"http://localhost:8080/app/uploads/..."} -->`
-    captures the URL as a literal string. `wp_get_attachment_url()`
-    filters don't run on literal strings at render time. So the
-    apply-side URL retarget rewrites `<source>/app/uploads → S3-baseurl`
-    BEFORE the host retarget, ensuring `<img src>` lands pointing
-    directly at the S3 bucket (or your configured CDN URL via
-    `FP_S3_BUCKET_URL`).
+    Block markup captures the image URL as a literal string in the
+    block attrs, e.g.:
+
+    ```html
+    <!-- wp:image {"id":42,"url":"http://localhost:8080/app/uploads/..."} -->
+    ```
+
+    `wp_get_attachment_url()` filters don't run on literal strings at
+    render time. So the apply-side URL retarget rewrites the captured
+    uploads prefix to `wp_get_upload_dir()['baseurl']` BEFORE the host
+    retarget, ensuring `img src` lands pointing directly at the S3
+    bucket (or your configured CDN URL via `FP_S3_BUCKET_URL`).
   </Accordion>
 
   <Accordion title="How do I roll back a snapshot apply?" icon="rotate-left">
