@@ -207,9 +207,10 @@ adapter detects when the active theme is an FSE block theme
   `page_for_posts`, `permalink_structure`, `site_icon`,
   `site_logo`, `custom_logo`
 - **Attachment refs** (attachments.json + binaries): attachments
-  referenced by the logo options OR by inline `<!-- wp:image
-  {"id":N} -->` block markup inside captured owned posts. Other
-  uploads are skipped — they're treated as content.
+  referenced by the logo options OR by inline `wp:image` block
+  markup inside captured owned posts (e.g. an image block with
+  `"id":42` referencing an attachment). Other uploads are skipped
+  — they're treated as content.
 - **Theme mods**: for the active stylesheet only
 
 **Pages and posts are intentionally OUT of scope** — they're
