@@ -12,6 +12,16 @@ This page walks the designer half of that line: edit FSE block
 templates locally in Site Editor, capture into a snapshot, promote
 through git the same way code changes are.
 
+<Note>
+  This page documents the default **DB-row mode** — design state is
+  captured as `wp_template / wp_template_part / wp_global_styles` DB
+  rows in the snapshot's `templates.json` sidecar and upserted on
+  apply.
+  An opt-in alternative — [theme-files mode](/designer-flow-theme-files) —
+  saves design state to theme files in the site repo instead. Same
+  goal, different storage shape. Pick one per tenant.
+</Note>
+
 ## What's in scope (ships in the snapshot)
 
 | Surface | Captured how |

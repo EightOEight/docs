@@ -1,0 +1,301 @@
+---
+title: "Designer flow: theme-files mode"
+description: "Save block-theme design state to theme files instead of shipping DB rows. Opt-in per tenant via Automattic's Create Block Theme plugin."
+icon: "folder-tree"
+---
+
+This is the **opt-in variant** of the [designer flow](/designer-flow).
+Same goal — designer customizations ship through git, content stays
+live — but design state lives as theme files (`parts/*.html`,
+`templates/*.html`, `theme.json`) in the site repo rather than as DB
+rows in a snapshot sidecar.
+
+## When to use this variant
+
+<CardGroup cols={2}>
+  <Card title="Stick with DB-row mode" icon="database">
+    Default. Snapshots are the canonical channel. Sidecar carries
+    `wp_template / wp_template_part / wp_global_styles / wp_navigation`.
+    Fine for most sites. No tenant changes required.
+  </Card>
+  <Card title="Switch to theme-files mode" icon="folder-tree">
+    Designer customizations are diff-able HTML in code review.
+    Snapshot shrinks to just navigation + options + attachments.
+    No DB-row taxonomy juggling at apply time.
+  </Card>
+</CardGroup>
+
+Theme-files mode trades **DB-row authority** for **filesystem
+authority**. Both modes are supported in parallel. The migration is
+per-tenant and reversible.
+
+## What changes vs the default
+
+| | Default (DB-row mode) | Theme-files mode |
+|---|---|---|
+| `wp_template`, `wp_template_part`, `wp_global_styles` | Ship in `templates.json` sidecar | Live in `web/app/themes/<child>/` files |
+| Code review diff | Opaque JSON blob | Clean HTML + theme.json diff |
+| Apply-time DB writes for design state | Upsert per row, set `wp_theme` taxonomy | None — files load from disk on render |
+| Synced patterns (`wp_block`) | DB-resident, captured | Still DB-resident (no file equivalent yet) |
+| `wp_navigation`, options, attachments | DB sidecar | DB sidecar (unchanged) |
+| Snapshot footprint | Full design state in JSON | Slim — only the items still in the DB |
+| Designer tool | WP Site Editor → save customization → DB row | WP Site Editor → save customization → DB row → "Save to theme" → file write + DB clear |
+
+## Tenant bootstrap (one-time per site)
+
+<Steps>
+  <Step title="Bump mu-plugin">
+    Tenant `composer.json` requires `frankenpress/mu-plugin: ^0.13.10` or later.
+    The drift linter at this version accepts site-tracked themes; the reaper
+    correctly handles "captured set is empty → reap all rows of this type".
+  </Step>
+
+  <Step title="Add Create Block Theme as a designer dep">
+    site-template v0.7.0+ already adds
+    `wpackagist-plugin/create-block-theme` to `require-dev`. On a fresh
+    fork: nothing to do. On an older fork:
+
+    ```bash
+    composer require --dev wpackagist-plugin/create-block-theme:^2.9
+    ```
+
+    `--dev` is load-bearing: the plugin is a designer tool and must
+    never reach the production image. The Dockerfile's
+    `composer install --no-dev` already excludes it.
+  </Step>
+
+  <Step title="Create + activate a child theme">
+    On the designer's local docker-compose stack (lockdown off, plugin active):
+
+    ```bash
+    docker compose exec site wp --allow-root --path=/app/web/wp eval '
+      wp_set_current_user(1);
+      $req = new WP_REST_Request("POST", "/create-block-theme/v1/create-child");
+      $req->set_body_params([
+          "name" => "mysite-design",
+          "description" => "Design overlay",
+          "uri" => "", "author" => "Mysite", "author_uri" => "",
+          "subfolder" => "", "tags" => "",
+      ]);
+      echo json_encode(rest_do_request($req)->get_data());
+    '
+    ```
+
+    Creates `web/app/themes/mysite-design/` with `style.css` declaring
+    `Template: twentytwentyfive` (or whatever the active parent is) and
+    auto-activates the child.
+
+    <Note>
+      The child theme **must** be active before any save-user-changes
+      call. With the parent active, the plugin writes INTO the
+      composer-managed parent directory — silently overwritten on the
+      next `composer install` locally; fails outright on the
+      read-only production filesystem.
+    </Note>
+  </Step>
+
+  <Step title="Commit the child theme tree">
+    Unignore the child theme dir in the site repo's `.gitignore` so
+    composer's `web/app/themes/*` ignore rule doesn't swallow it:
+
+    ```text
+    web/app/themes/*
+    !web/app/themes/mysite-design/
+    ```
+
+    Then `git add web/app/themes/mysite-design/ && git commit`. The
+    Dockerfile's existing `COPY` for `web/app/` will bake the child
+    theme into every image build.
+  </Step>
+
+  <Step title="Bump the chart's active-theme value">
+    In `gitops-fp` (or wherever the chart values live for the tenant):
+
+    ```yaml
+    siteInstall:
+      activeTheme: mysite-design
+    ```
+
+    Before: `twentytwentyfive` (composer-installed parent). After:
+    the child theme. The install Job's
+    `wp theme activate {{ .activeTheme }}` runs on every release, so
+    new pods on a fresh DB activate the correct theme.
+  </Step>
+</Steps>
+
+## Designer workflow per release
+
+<Steps>
+  <Step title="Edit in Site Editor">
+    Designer's local docker-compose stack, lockdown off, child theme
+    active. Edit `parts/header.html` via Site Editor like normal.
+    WordPress creates `wp_template_part` DB rows attached to the
+    active child theme as customizations land.
+  </Step>
+
+  <Step title="Save to theme files">
+    Once the designer is happy, invoke `POST /create-block-theme/v1/save`:
+
+    ```bash
+    docker compose exec site wp --allow-root --path=/app/web/wp eval '
+      wp_set_current_user(1);
+      $req = new WP_REST_Request("POST", "/create-block-theme/v1/save");
+      $req->set_body_params([
+          "saveTemplates"             => true,
+          "processOnlySavedTemplates" => false,
+          "saveStyle"                 => true,
+          "saveFonts"                 => false,
+          "savePatterns"              => false,
+      ]);
+      echo json_encode(rest_do_request($req)->get_data());
+    '
+    ```
+
+    Writes `web/app/themes/mysite-design/parts/header.html`,
+    `web/app/themes/mysite-design/theme.json`, etc. Then clears the
+    corresponding DB rows.
+  </Step>
+
+  <Step title="Snapshot + commit">
+    ```bash
+    fp snapshot --slug=launch --note="Designer iteration N"
+    ```
+
+    The snapshot's `templates.json` is now slim — no
+    `wp_template / wp_template_part / wp_global_styles` entries
+    because the DB rows were cleared. The reaper picks up the
+    "captured set is empty" signal for those types and trashes any
+    orphan rows on apply (e.g. left over from earlier DB-row-mode
+    releases).
+
+    Commit both:
+    - The theme files at `web/app/themes/mysite-design/`
+    - The slim snapshot at `web/imports/launch/`
+  </Step>
+
+  <Step title="Tag + ship">
+    ```bash
+    git tag vX.Y.Z && git push origin vX.Y.Z
+    ```
+
+    CI builds the image with the theme files baked in. ArgoCD (or
+    Kargo, when present) reconciles. The install Job re-runs `wp fp
+    apply` against the slim snapshot.
+
+    On render, the FSE renderer resolves the customized header from
+    the file (`source=theme, wp_id=null`), not a DB row.
+  </Step>
+</Steps>
+
+## What `wp fp apply` does in theme-files mode
+
+The apply path is identical to the default — the slim snapshot just
+gives it less to do:
+
+1. **Stage 1** — WXR import: no-op (no additive post types).
+2. **Stage 2** — Attachments: ships the design-asset binaries that
+   templates reference, same as before.
+3. **Stage 3** — Owned posts: upserts `wp_navigation` (and any
+   `wp_block` synced patterns that haven't been migrated). No
+   `wp_template_part / wp_template / wp_global_styles` work because
+   the snapshot doesn't carry any.
+4. **Stage 3b** — Reaper: trashes orphan rows for owned types whose
+   captured set is empty. This is what cleans up the previous-release
+   DB-row design state on the first theme-files-mode apply.
+5. **Stage 4** — Options: same as before (site-identity options,
+   theme_mods, page_on_front slug remap).
+6. **Stage 5** — URL retarget: same as before.
+
+## Tradeoffs to know about
+
+<AccordionGroup>
+  <Accordion title="Exported HTML loses attachment-ID linkage" icon="link-slash">
+    When the plugin writes `parts/*.html`, image blocks that had
+    `"id":33` and `class="wp-image-33"` in their captured form get
+    stripped down to URL-only:
+
+    ```text
+    <!-- BEFORE (DB row) -->
+    <!-- wp:image {"id":33,"sizeSlug":"full"} -->
+    <figure><img src="..." class="wp-image-33"/></figure>
+
+    <!-- AFTER (theme file) -->
+    <!-- wp:image {"sizeSlug":"full"} -->
+    <figure><img src="..."/></figure>
+    ```
+
+    The URL still gets search-replaced on apply (so cross-environment
+    URL rewriting still works), but the bidirectional
+    WP-attachment-post linkage is gone. Blocks that read the
+    attachment ID at render time (lightboxes, view-original-size
+    buttons) won't find one to read.
+
+    Acceptable for most sites. Consider sticking with DB-row mode if
+    you have heavy image-interactive UX.
+  </Accordion>
+
+  <Accordion title="Synced patterns (wp_block) still ride in the DB" icon="repeat">
+    Create Block Theme's `savePatterns` flag can write synced
+    patterns into the theme, but FrankenPress doesn't recommend it
+    yet (not empirically validated end-to-end). For now, leave synced
+    patterns as DB-resident — they're captured by the snapshot's
+    `templates.json` and applied via the standard upsert path.
+  </Accordion>
+
+  <Accordion title="Local docker-compose state can drift if you swap themes" icon="rotate">
+    Common gotcha: if the designer accidentally activates the
+    composer-managed parent (not the child) and runs save-user-changes,
+    the plugin writes into the parent dir. On the next
+    `composer install` locally, those files get clobbered.
+
+    Recovery: re-activate the child, re-run save-user-changes. The
+    plugin re-reads from DB rows; if those are gone, restore from a
+    recent snapshot.
+  </Accordion>
+
+  <Accordion title="Drift linter expectations" icon="shield-check">
+    `wp fp snapshot` runs a drift check at capture time:
+
+    - **Plugins** active but not composer-installed AND not
+      site-tracked (in `web/app/plugins/<slug>/`) → drift error.
+    - **Theme** active but not composer-installed AND not
+      site-tracked (in `web/app/themes/<slug>/`) → drift error.
+
+    Theme-files mode relies on the **site-tracked** branch — the
+    child theme lives in `web/app/themes/mysite-design/` but isn't
+    composer-installed. mu-plugin v0.13.10+ recognises that as valid.
+    Older mu-plugin versions will trip the linter; bump first.
+  </Accordion>
+
+  <Accordion title="Rolling back to DB-row mode" icon="rotate-left">
+    Per-tenant migration is reversible:
+
+    1. Delete `web/app/themes/mysite-design/parts/*.html` from the
+       site repo (keep `style.css` + `theme.json` if you want).
+    2. Revert `siteInstall.activeTheme` to the composer-managed parent
+       (`twentytwentyfive` or whichever).
+    3. Re-capture customizations as DB rows: open Site Editor on
+       local, recreate the customization in admin, `fp snapshot`.
+
+    Apply on the target then re-establishes the DB-row design state
+    via the normal upsert path. The reaper trashes orphan
+    `wp_template_part` rows under the child theme (since it's no
+    longer active).
+  </Accordion>
+</AccordionGroup>
+
+## Per-repo versions
+
+| Repo | Minimum version |
+|---|---|
+| [`mu-plugin`](https://github.com/frankenpress/mu-plugin) | `v0.13.10` (drift linter site-tracked + reaper empty-set semantics) |
+| [`site-template`](https://github.com/frankenpress/site-template) | `v0.7.0` (Create Block Theme require-dev) |
+| [`charts`](https://github.com/frankenpress/charts) | `v0.11.0+` (any post-v0.11.0; chart logic unchanged for theme-files mode) |
+| Create Block Theme plugin | `v2.9.0+` |
+
+## Companion docs
+
+- [Designer flow](/designer-flow) — default DB-row mode.
+- [mu-plugin](/components/mu-plugin) — capture/apply mechanics.
+- [site-template](/components/site-template) — Bedrock layout + composer setup.
+- [charts](/components/charts) — install Job + `siteInstall.activeTheme`.
