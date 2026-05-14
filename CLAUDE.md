@@ -56,7 +56,7 @@ The kind-cluster quickstart is **smoke-tested** on every release:
 
 1. Create a fresh kind cluster (`kind create cluster --name <name>`)
 2. Run the steps from `quickstart.mdx` verbatim
-3. Verify the WP admin loads, an upload lands in MinIO, and the lockdown buttons are absent
+3. Verify the WP admin loads, **the Media Library renders a working thumbnail in the WP admin and the browser returns 200 for the public asset URL** (an `mc ls` hit is not sufficient — that masked the pre-v0.12.3 bucket-URL regression), and the lockdown buttons are absent
 
 If a doc step fails when run verbatim, treat it as a release blocker.
 The Mintlify preview is `mint dev` from the repo root after `npm i -g mint`.
