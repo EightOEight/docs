@@ -1,7 +1,7 @@
 ---
 title: "Logging"
 description: "What FrankenPress writes to stdout/stderr and how to ship it to Grafana Loki, Datadog, or any other backend"
-icon: "scroll-text"
+icon: "scroll"
 ---
 
 FrankenPress writes structured logs to **stdout/stderr**. Any cluster-side
@@ -166,7 +166,7 @@ default Caddy log pipeline applies.
 
 | Symptom | Likely cause |
 |---|---|
-| Only startup chatter in stdout, no per-request lines | You're on an `runtime` image older than the JSON-access-log change. Pull the latest tag and `helm upgrade`. |
+| Only startup chatter in stdout, no per-request lines | You're on a `runtime` image older than the JSON-access-log change. Pull the latest tag and `helm upgrade`. |
 | WP debug entries missing from logs in staging | `WP_DEBUG_LOG` was overridden to `true` (writes to disk); confirm it resolves to `php://stderr` in your `config/environments/staging.php`. |
 | Vector / Alloy isn't seeing the pod's logs | Label selector mismatch — verify `app.kubernetes.io/name=site` is present on the pod (`kubectl get pod -o yaml | grep -A1 labels`). |
 | Cache-Status header missing from access log lines | Souin only sets it on requests that flow through the `cache` directive. Logged-in / authenticated requests bypass cache by design and show no `Cache-Status`. |
