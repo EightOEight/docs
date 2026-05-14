@@ -210,15 +210,17 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
       --set image.repository=ghcr.io/<owner>/mysite \
       --set image.tag=v0.1.0 \
       --set site.url=http://localhost:8080 \
+      --set site.env=development \
       --wait --timeout=10m
     ```
 
     <Note>
       `--set site.url=http://localhost:8080` matches the port-forward
-      URL below. The default (`http://site.localhost`) makes
-      WordPress 301-redirect every `localhost:8080` request away — see
-      [Quickstart](/quickstart) for the full explanation. For a real
-      deploy, set this to your public URL.
+      URL below; `--set site.env=development` keeps `FORCE_SSL_ADMIN=false`
+      so `/wp/wp-admin/` doesn't 302 to a `https://` URL the port-forward
+      isn't serving. See [Quickstart](/quickstart) for the full
+      explanation. For a real deploy, drop both overrides and set
+      `site.url` to your public HTTPS URL.
     </Note>
 
     The chart runs `wp core install` automatically as a post-install
