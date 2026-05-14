@@ -47,10 +47,11 @@ template repo unchanged — no fork required for the smoke test.
 
     ```bash
     helm install mysite oci://ghcr.io/frankenpress/charts/site \
-      --version 0.12.0 \
+      --version 0.12.3 \
       --namespace mysite --create-namespace \
       --set site.url=http://localhost:8080 \
       --set site.env=development \
+      --set externalS3.bucketUrl=http://localhost:9000/site-media \
       --wait --timeout=10m
     ```
 
@@ -70,6 +71,13 @@ template repo unchanged — no fork required for the smoke test.
       port-forward isn't TLS-serving). The default `site.env=production`
       is correct for any real deploy behind a TLS-terminating Ingress —
       only relax it for the local port-forward case.
+
+      `--set externalS3.bucketUrl=http://localhost:9000/site-media`
+      tells `humanmade/s3-uploads` to write that URL into attachment
+      GUIDs and post content. Without it, WordPress bakes canonical
+      `https://site-media.s3.amazonaws.com/...` URLs and the Media
+      Library 403s on every thumbnail. For a real deploy this is your
+      CDN URL — see [Production topology](/operations/production).
     </Note>
 
     The chart runs `wp core install` automatically as a post-install
@@ -78,6 +86,22 @@ template repo unchanged — no fork required for the smoke test.
     ```bash
     kubectl --namespace mysite get jobs --watch
     ```
+
+    Once the install Job is `Complete`, expose the MinIO bucket for
+    anonymous browser GETs so the Media Library can render thumbnails:
+
+    ```bash
+    kubectl --namespace mysite exec deploy/mysite-minio -- \
+      mc anonymous set download local/site-media
+    ```
+
+    <Note>
+      The bundled MinIO subchart creates buckets `private` by default.
+      `mc anonymous set download` makes objects publicly readable —
+      acceptable for a dev kind cluster, never for production. Real
+      deploys put their bucket behind a CDN with IAM-controlled
+      Object Ownership.
+    </Note>
 
     <Tip>
       The default `image.repository` points at the demo site image
@@ -96,10 +120,12 @@ template repo unchanged — no fork required for the smoke test.
       -o jsonpath='{.data.admin_password}' | base64 -d
     ```
 
-    Port-forward the Service:
+    Port-forward both the site and the MinIO bucket (in two separate
+    shells, or background the first with `&`):
 
     ```bash
-    kubectl --namespace mysite port-forward svc/mysite 8080:80
+    kubectl --namespace mysite port-forward svc/mysite 8080:80 &
+    kubectl --namespace mysite port-forward svc/mysite-minio 9000:9000 &
     ```
 
     <Note>
@@ -107,9 +133,9 @@ template repo unchanged — no fork required for the smoke test.
       `<release>-<chart>` to just `<release>` when the release name
       already contains the chart name (`site`) as a substring. Because
       `mysite` contains `site`, resources render as `mysite`,
-      `mysite-install`, `mysite-keys`, etc. For a release named
-      `myblog`, the same resources would be `myblog-site`,
-      `myblog-site-install`, `myblog-site-keys`.
+      `mysite-install`, `mysite-keys`, `mysite-minio`, etc. For a
+      release named `myblog`, the same resources would be
+      `myblog-site`, `myblog-site-install`, `myblog-site-minio`.
     </Note>
 
     Open **http://localhost:8080/wp/wp-admin/** in your browser. Log in
@@ -118,8 +144,25 @@ template repo unchanged — no fork required for the smoke test.
     <Check>
       You should see the WordPress admin dashboard. Confirm the
       "Update WordPress" / "Update Plugins" / "Update Themes" buttons
-      are **absent** — the in-cluster lockdown is on.
+      are **absent** — the in-cluster lockdown is on. Upload an image
+      from **Media → Add New** — the thumbnail should render
+      immediately in the Media Library, served from
+      `localhost:9000/site-media/...`.
     </Check>
+
+    <Tip>
+      **Upgrading from `0.12.2` or earlier?** Pre-0.12.3 didn't emit
+      `FP_S3_BUCKET_URL` when the MinIO subchart was enabled, so any
+      attachments uploaded before this fix have AWS URLs baked into
+      `wp_posts.guid` and post content. Rewrite them in place:
+
+      ```bash
+      kubectl --namespace mysite exec deploy/mysite -- \
+        wp --allow-root --path=/app/web/wp search-replace \
+        'https://site-media.s3.amazonaws.com' 'http://localhost:9000/site-media' \
+        --all-tables
+      ```
+    </Tip>
 
     <Tip>
       Want to set the admin password at install time instead of
