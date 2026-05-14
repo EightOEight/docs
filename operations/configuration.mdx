@@ -33,7 +33,7 @@ only) and PHP errors on stderr. Shipping setup is in [Logging](/operations/loggi
 | `FP_S3_KEY` | — | ✓ |
 | `FP_S3_SECRET` | — | ✓ |
 | `FP_S3_REGION` | `us-east-1` | |
-| `FP_S3_BUCKET_URL` | — | optional CDN URL |
+| `FP_S3_BUCKET_URL` | — | Public URL clients use to fetch media. CDN URL or raw bucket URL for AWS S3 / R2 / GCS XML; port-forward or HTTPRoute URL for the bundled MinIO subchart. **When unset, `humanmade/s3-uploads` bakes canonical `https://<bucket>.s3.amazonaws.com` URLs into attachment GUIDs and post content** — required for any non-AWS bucket. Changing this on an existing site does not rewrite already-stored URLs; use `wp search-replace`. |
 | `FP_S3_ENDPOINT` | — | optional, for non-AWS S3-compatible (MinIO, R2, GCS XML) |
 | `FP_S3_OBJECT_ACL` | (empty — no ACL) | optional S3 object ACL. Leave unset for buckets with **Object Ownership = "Bucket owner enforced"** (the AWS new-bucket default since April 2023). Set to `public-read` / `private` / `authenticated-read` only for ACL-enabled buckets. |
 | `FP_S3_DISABLED` | auto: on in-cluster, off out-of-cluster | tri-state. Truthy (`1`/`true`/`yes`/`on`) → off. Falsy (`0`/`false`/`no`/`off`) → force on. Unset → default gates on `KUBERNETES_SERVICE_HOST` (kubelet-injected on every pod): production stays on, local dev skips the `s3://` stream wrapper so admin install flows hit local disk. Force on locally with `FP_S3_DISABLED=0`. |
@@ -187,11 +187,11 @@ externalCache:                  # used when redis.enabled = false
   host: ""
   port: 6379
 
-externalS3:                     # used when minio.enabled = false
+externalS3:                     # bucket/region/endpoint/secrets used when minio.enabled = false
   bucket: site-media
   region: us-east-1
   endpoint: ""                  # leave empty for AWS S3
-  bucketUrl: ""                 # CDN URL, sets WP_CONTENT_URL
+  bucketUrl: ""                 # required for any non-AWS bucket (CDN, R2, MinIO). Read in both modes.
   existingSecret: ""            # keys: access-key, secret-key
 ```
 
