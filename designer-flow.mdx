@@ -99,29 +99,29 @@ not a WordPress capability check.
 </Note>
 
 <Steps>
-  <Step title="Bring up the local stack">
+  <Step title="Onboard with fp init">
     ```bash
     git clone git@github.com:<your-org>/<your-site>.git
     cd <your-site>
-    make setup    # composer install + .env
-    make up       # docker compose up (site + db + redis + minio)
+    fp init
     ```
 
-    `curl http://localhost:8080/healthz` returns `ok` once Caddy is up.
-  </Step>
+    One command does it all: scaffolds `.env`, runs `composer install`
+    via docker, brings the stack up (`docker compose up -d --wait`),
+    installs WordPress, and applies the most recent committed snapshot
+    (if any) so the designer's previous work is restored — assets and
+    all.
 
-  <Step title="Install WordPress (fresh DBs only)">
-    ```bash
-    make wp ARGS="core install \
-      --url=http://localhost:8080 \
-      --title='Your Site' \
-      --admin_user=admin \
-      --admin_email=admin@example.com \
-      --admin_password=admin \
-      --skip-email"
-    ```
+    Defaults: admin `admin` / admin pass `admin`, URL `http://localhost:8080`,
+    title "FrankenPress site". Override via `[init]` in `frankenpress.toml`.
 
-    Default FSE theme (`twentytwentyfive`) is activated automatically.
+    Re-run `fp init` after `docker compose down -v` to recover from a
+    wiped local stack. Same command, same result. Idempotent — every
+    step no-ops if the state is already correct.
+
+    **Lower-level alternative**: if you'd rather drive it manually,
+    `make setup && make up && make wp ARGS="core install ..."` is the
+    equivalent sequence.
   </Step>
 
   <Step title="Design in Site Editor">

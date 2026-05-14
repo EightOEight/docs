@@ -109,34 +109,46 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     ```bash
     git clone git@github.com:<owner>/mysite.git
     cd mysite
-    make setup     # composer install + .env from .env.example
-    make up        # docker compose up -d (site + mariadb + redis + minio)
+    fp init
     ```
 
-    Install WordPress (one-time, on first boot):
+    `fp init` is a one-command onboarding helper — it scaffolds `.env`
+    from `.env.example`, runs `composer install` via docker, brings
+    the stack up (`docker compose up -d --wait`), installs WordPress
+    with sensible local defaults, and applies the latest committed
+    snapshot (if any). Re-run it after `docker compose down -v` to
+    recover from a wiped local stack.
 
-    ```bash
-    make wp ARGS="core install \
-      --url=http://localhost:8080 \
-      --title='My Site' \
-      --admin_user=admin \
-      --admin_email=admin@example.com \
-      --admin_password=admin \
-      --skip-email"
-    ```
-
-    The `make wp` recipe runs wp-cli in the site container with
-    `--allow-root --path=/app/web/wp` (WordPress core lives under
-    `web/wp/` per the Bedrock layout — wp-cli won't find it otherwise).
-    Pass your sub-command + flags through `ARGS="…"`.
-
-    Open `http://localhost:8080/wp/wp-admin/` and log in.
+    Open `http://localhost:8080/wp/wp-admin/` and log in
+    (`admin / admin` by default; override via `[init]` in
+    `frankenpress.toml`).
 
     <Note>
-      Manual install is required only for the local Docker Compose
-      stack. When you deploy via the Helm chart (the next steps), the
-      chart runs `wp core install` automatically as a post-install hook
-      Job — see [charts → First install](/components/charts#first-install).
+      Lower-level alternative if you'd rather drive it manually:
+      ```bash
+      make setup
+      make up
+      make wp ARGS="core install \
+        --url=http://localhost:8080 \
+        --title='My Site' \
+        --admin_user=admin \
+        --admin_email=admin@example.com \
+        --admin_password=admin \
+        --skip-email"
+      ```
+
+      `make wp` runs wp-cli in the site container with
+      `--allow-root --path=/app/web/wp` (WordPress core lives under
+      `web/wp/` per the Bedrock layout — wp-cli won't find it
+      otherwise). Pass your sub-command + flags through `ARGS="…"`.
+    </Note>
+
+    <Note>
+      Local Docker Compose is the only place you need to install
+      WordPress manually (or via `fp init`). When you deploy via the
+      Helm chart (the next steps), the chart runs `wp core install`
+      automatically as a post-install hook Job — see [charts →
+      First install](/components/charts#first-install).
     </Note>
 
     <Check>
