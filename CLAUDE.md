@@ -15,7 +15,7 @@ from this repo's main branch.
 ## Mintlify essentials
 
 - `docs.json` — config + sidebar navigation. Adding a page means adding it to a `pages: [...]` array under the appropriate `groups[]` entry under `navigation.tabs[].groups[]`.
-- `*.mdx` — Markdown + JSX. Frontmatter (`title`, `description`, `icon`) controls the page header. Mintlify uses [Lucide-style](https://lucide.dev/) and FontAwesome icon names.
+- `*.mdx` — Markdown + JSX. Frontmatter (`title`, `description`, `icon`) controls the page header. **Use FontAwesome icon names — not Lucide.** Mintlify can resolve both in principle but defaults to FontAwesome, and Lucide-style names (anything with the `-round`, `-text`, `-circle-*` suffixes — e.g. `key-round`, `scroll-text`) render as missing icons in the sidebar. The Operations group shipped two of these in production before they were caught. If you want an icon that only exists in Lucide, render it locally with `mint dev` first to confirm it resolves.
 - Components: `<Card>`, `<CardGroup>`, `<Steps>` / `<Step>`, `<AccordionGroup>` / `<Accordion>`, `<Tip>`, `<Note>`, `<Warning>`, `<Check>`, `<Tabs>` / `<Tab>`. Use them — they render way better than equivalent Markdown.
 - Internal links are absolute paths without the `.mdx` extension: `[X](/components/runtime)`.
 - External links use full URLs.
@@ -37,8 +37,9 @@ from this repo's main branch.
 - **Show defaults next to params.** Default goes in the same row as the description, not below it.
 - **Show the failure mode.** "If X is missing, you'll see Y" — readers are usually here because something broke.
 - **Production-vs-dev symmetry.** Every "this is the dev default" statement is paired with the production swap. The chart's bundled subcharts are the easiest example.
-- **Lockdown is a feature, not a bug.** The "Update WordPress" buttons are absent on purpose. Frame this clearly when it comes up — readers will assume it's a bug otherwise.
+- **Lockdown is a feature, not a bug — and it's gated, not hard-coded.** The "Update WordPress / plugins / themes" buttons are absent in-cluster on purpose. Frame this clearly when it comes up — readers will assume it's a bug otherwise. `DISALLOW_FILE_EDIT` / `DISALLOW_FILE_MODS` are gated on `KUBERNETES_SERVICE_HOST` (and a narrow `FP_ALLOW_FILE_MODS` opt-out used by the install Job during snapshot apply); out-of-cluster (docker-compose, bare local) both are `false` so designers can install evaluation plugins/themes locally and promote via `wp fp snapshot`. Don't describe the constants as "hard-coded" — `site-template/config/application.php` is the source of truth and contradicted that copy in the docs for a while.
 - **Internal links use the canonical path.** `/components/runtime` not `https://docs.frankenpress.com/components/runtime` (Mintlify rewrites correctly + makes preview deployments work).
+- **Bitnami `common.names.fullname` collapses when the release name contains the chart name as a substring.** Chart name is `site`. `helm install mysite charts/site` produces `Service: mysite`, `Secret: mysite-install`, `Secret: mysite-keys`, `ConfigMap: mysite-env` — no `-site-` suffix anywhere — because `mysite` contains `site`. `helm install myblog charts/site` produces `myblog-site`, `myblog-site-install`, etc. The quickstart's example release `mysite` is in the collapsing case; the abstract `<release>-site-*` placeholder elsewhere assumes the non-collapsing case (real tenants like `sts` / `eoe` don't contain `site`). When writing concrete examples, run `helm template <release> charts/site` to see what the rendered names actually are. The quickstart ships a `<Note>` explaining the rule.
 
 ## Don'ts
 
@@ -68,6 +69,22 @@ If anyone bumps or renames anything in `runtime`, `mu-plugin`,
 1. The component-specific page (`/components/<name>`)
 2. `/operations/configuration` (the env-var reference)
 3. The relevant section of `quickstart.mdx` if it changed the user-facing flow
+
+## When you tag a new chart release
+
+The pinned `--version X.Y.Z` appears in **four** pages and drifts silently
+— it shipped at `0.7.0` while the chart was at `0.12.0`, which would have
+hard-failed the quickstart smoke test on `helm install` because the old
+version is no longer published. When you bump `charts/charts/site/Chart.yaml`,
+grep for the previous pin and update every hit:
+
+```bash
+grep -rn -- '--version [0-9]' docs/ --include='*.mdx'
+```
+
+Expected hits: `quickstart.mdx`, `your-first-site.mdx`,
+`components/charts.mdx`, `operations/upgrade.mdx`. Bump all four to
+match `Chart.yaml.version`.
 
 ## Local development
 
