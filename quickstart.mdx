@@ -85,15 +85,25 @@ template repo unchanged — no fork required for the smoke test.
     Retrieve the auto-generated admin password:
 
     ```bash
-    kubectl --namespace mysite get secret mysite-site-install \
+    kubectl --namespace mysite get secret mysite-install \
       -o jsonpath='{.data.admin_password}' | base64 -d
     ```
 
     Port-forward the Service:
 
     ```bash
-    kubectl --namespace mysite port-forward svc/mysite-site 8080:80
+    kubectl --namespace mysite port-forward svc/mysite 8080:80
     ```
+
+    <Note>
+      Bitnami's `common.names.fullname` helper collapses
+      `<release>-<chart>` to just `<release>` when the release name
+      already contains the chart name (`site`) as a substring. Because
+      `mysite` contains `site`, resources render as `mysite`,
+      `mysite-install`, `mysite-keys`, etc. For a release named
+      `myblog`, the same resources would be `myblog-site`,
+      `myblog-site-install`, `myblog-site-keys`.
+    </Note>
 
     Open **http://localhost:8080/wp/wp-admin/** in your browser. Log in
     as `admin` with the password from the Secret above.
@@ -101,7 +111,7 @@ template repo unchanged — no fork required for the smoke test.
     <Check>
       You should see the WordPress admin dashboard. Confirm the
       "Update WordPress" / "Update Plugins" / "Update Themes" buttons
-      are **absent** — the lockdown is hard-coded.
+      are **absent** — the in-cluster lockdown is on.
     </Check>
 
     <Tip>

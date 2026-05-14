@@ -210,7 +210,7 @@ etc.), restart the Deployment and pods pick up the new value. No
 chart-side reconciliation is required.
 
 ```bash
-kubectl rollout restart deployment/mysite-site
+kubectl rollout restart deployment/mysite
 ```
 
 Or wire up [Stakater Reloader](/operations/email#auto-rolling-on-secret-change-reloader)
@@ -233,7 +233,7 @@ and rotation is self-driving:
 
 ```bash
 # Whatever rotates your Secret updates the value:
-kubectl patch secret mysite-site-install \
+kubectl patch secret mysite-install \
   -p '{"stringData":{"admin_password":"new-value"}}'
 
 # Reloader rolls the Deployment → initContainer detects drift →

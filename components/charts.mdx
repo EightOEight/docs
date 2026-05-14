@@ -137,7 +137,7 @@ By default, the chart creates a `<release>-site-install` Secret with
 a random 32-char admin password. Retrieve it after install:
 
 ```bash
-kubectl --namespace mysite get secret mysite-site-install \
+kubectl --namespace mysite get secret mysite-install \
   -o jsonpath='{.data.admin_password}' | base64 -d
 ```
 
