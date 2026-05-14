@@ -205,7 +205,7 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
     kubectl config use-context kind-myfp
 
     helm install mysite oci://ghcr.io/frankenpress/charts/site \
-      --version 0.7.0 \
+      --version 0.12.0 \
       --namespace mysite --create-namespace \
       --set image.repository=ghcr.io/<owner>/mysite \
       --set image.tag=v0.1.0 \
@@ -230,10 +230,10 @@ name you actually pick (`my-blog`, `acme-marketing`, etc.). Same for
 
     ```bash
     # Retrieve the auto-generated admin password
-    kubectl --namespace mysite get secret mysite-site-install \
+    kubectl --namespace mysite get secret mysite-install \
       -o jsonpath='{.data.admin_password}' | base64 -d
 
-    kubectl --namespace mysite port-forward svc/mysite-site 8080:80 &
+    kubectl --namespace mysite port-forward svc/mysite 8080:80 &
     ```
 
     Open `http://localhost:8080/wp/wp-admin/` and log in as `admin`.

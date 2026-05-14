@@ -161,29 +161,40 @@ composer-installed content but unhides anything you commit explicitly.
 
 ## Lockdown
 
-The four constants in `config/application.php` are **hard-coded** —
-no env-var override:
+`DISALLOW_FILE_EDIT` and `DISALLOW_FILE_MODS` in `config/application.php`
+are **gated on `KUBERNETES_SERVICE_HOST`** — the env var the kubelet
+injects into every Pod:
 
 ```php
-Config::define( 'DISALLOW_FILE_EDIT', true );
-Config::define( 'DISALLOW_FILE_MODS', true );
+$fp_in_kubernetes = (bool) getenv( 'KUBERNETES_SERVICE_HOST' );
+$fp_allow_mods    = filter_var( getenv( 'FP_ALLOW_FILE_MODS' ), FILTER_VALIDATE_BOOLEAN );
+$fp_lockdown      = $fp_in_kubernetes && ! $fp_allow_mods;
+Config::define( 'DISALLOW_FILE_EDIT', $fp_lockdown );
+Config::define( 'DISALLOW_FILE_MODS', $fp_lockdown );
 ```
 
-Plus in `production.php`:
+In-cluster: both are `true` — the "Update WordPress / plugins / themes"
+buttons are absent and admin-side installs hard-fail. Out-of-cluster
+(docker-compose, bare local): both are `false` so designers can install
+block plugins / evaluation themes locally and promote the result into
+the image + DB via `wp fp snapshot`. Prod can't accidentally land in the
+relaxed mode — the kubelet always sets `KUBERNETES_SERVICE_HOST`.
+
+`FP_ALLOW_FILE_MODS=1` is a narrow opt-out used by the chart's install
+Job only (so `wp plugin install` can run transiently inside the Job for
+snapshot apply). Web Pods, wpcron Pods, and init containers never see
+it.
+
+Plus in `production.php`, hard-coded with no gate:
 
 ```php
 Config::define( 'AUTOMATIC_UPDATER_DISABLED', true );
 Config::define( 'WP_AUTO_UPDATE_CORE', false );
 ```
 
-**There is no env-var override by design.** The container image is the
-source of truth — admin-side plugin installs would land on ephemeral
-disk and disappear on pod restart, replicating inconsistently across
-replicas. Hard-failing is the correct UX.
-
-If you genuinely need to relax this for a developer-only environment,
-fork the template and remove these lines. The default does not expose
-a knob.
+The container image is the source of truth in-cluster — admin-side
+plugin installs would land on ephemeral disk and disappear on pod
+restart, replicating inconsistently across replicas.
 
 ## CI / publishing
 

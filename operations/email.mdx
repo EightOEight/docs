@@ -54,7 +54,7 @@ gets registered, `wp_mail()` keeps falling through to broken `mail()`.
 You can confirm SMTPMailer is present in a running pod:
 
 ```bash
-kubectl -n mysite exec deploy/mysite-site -- \
+kubectl -n mysite exec deploy/mysite -- \
   ls /app/web/app/mu-plugins/mu-plugin/src/ | grep SMTPMailer
 ```
 
@@ -266,15 +266,15 @@ After deploying with `smtp.enabled=true`:
 
 ```bash
 # 1. Confirm env reached the pod.
-kubectl -n mysite exec deploy/mysite-site -- printenv | grep ^FP_SMTP_
+kubectl -n mysite exec deploy/mysite -- printenv | grep ^FP_SMTP_
 
 # 2. Confirm the mu-plugin registered the filter.
-kubectl -n mysite exec deploy/mysite-site -- \
+kubectl -n mysite exec deploy/mysite -- \
   wp --allow-root --path=/app/web/wp eval \
   'echo (has_action("phpmailer_init") ? "registered" : "missing") . "\n";'
 
 # 3. Send a test email — to an address you actually control.
-kubectl -n mysite exec deploy/mysite-site -- \
+kubectl -n mysite exec deploy/mysite -- \
   wp --allow-root --path=/app/web/wp eval \
   'var_export(wp_mail("you@example.com", "test", "hello"));'
 
@@ -315,7 +315,7 @@ When you rotate the API token in your provider's dashboard:
    Roll the Deployment so new pods read the rotated value:
 
    ```bash
-   kubectl -n mysite rollout restart deploy/mysite-site
+   kubectl -n mysite rollout restart deploy/mysite
    ```
 
 The wpcron CronJob and the post-install/post-upgrade Job each pull
@@ -356,7 +356,7 @@ Or — more conservative — pin specific Secrets:
 ```yaml
 commonAnnotations:
   # Only restart on changes to these named Secrets.
-  secret.reloader.stakater.com/reload: "mysite-smtp,mysite-site-keys,mysite-db-credentials"
+  secret.reloader.stakater.com/reload: "mysite-smtp,mysite-keys,mysite-db-credentials"
 ```
 
 <Note>

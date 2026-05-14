@@ -16,7 +16,7 @@ The chart is published as an OCI artifact on GHCR:
 
 ```bash
 helm install mysite oci://ghcr.io/frankenpress/charts/site \
-  --version 0.7.0 \
+  --version 0.12.0 \
   --namespace mysite --create-namespace
 ```
 
@@ -137,7 +137,7 @@ By default, the chart creates a `<release>-site-install` Secret with
 a random 32-char admin password. Retrieve it after install:
 
 ```bash
-kubectl --namespace mysite get secret mysite-site-install \
+kubectl --namespace mysite get secret mysite-install \
   -o jsonpath='{.data.admin_password}' | base64 -d
 ```
 
