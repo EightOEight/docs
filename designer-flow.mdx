@@ -148,15 +148,17 @@ not a WordPress capability check.
 
     `fp` prompts twice:
 
-    - **slug** — suggests the last one used, your git branch (minus `feat/`
-      etc.), or a composer-derived default. Enter accepts the suggestion.
+    - **slug** — defaults to a UTC timestamp (`YYYY-MM-DDTHH-MM-SSZ`),
+      filename-safe and lex-sortable so `ls web/imports/` is naturally
+      chronological. Enter accepts the timestamp; type a name to attach a
+      milestone marker (e.g. `pre-2026-rebrand`) instead.
     - **note** — opens `$EDITOR` if set + interactive; otherwise reads a
       single line from stdin. Empty notes are allowed.
 
     Both can be supplied as flags (`--slug <s>` / `--note <s>` /
-    `--note-file <path>`) to skip prompting. `--quick` skips everything,
-    uses a timestamped slug, and does not update `.fp/state.json` — useful
-    for ad-hoc / scripted captures.
+    `--note-file <path>`) to skip prompting. `--quick` skips everything
+    and does not update `.fp/state.json` — useful for ad-hoc / scripted
+    captures.
 
     Writes `web/imports/<slug>/`:
 
@@ -170,9 +172,14 @@ not a WordPress capability check.
     | `content.xml.gz` | WXR — typically empty for FSE sites (page/post are out of scope) |
     | `uploads-manifest.txt` | sha256 + size audit log of the entire uploads dir |
 
-    Re-running on the same slug pre-cleans the host target then re-captures
-    cleanly. If the target directory has uncommitted git changes, `fp` will
-    ask before overwriting — pass `--quick` to bypass that guard.
+    Re-running with the same explicit `--slug=<name>` pre-cleans the host
+    target then re-captures cleanly (the iterate-on-a-milestone path). The
+    default timestamp slug is fresh on every run, so accidental overwrite
+    isn't possible unless two captures land in the same UTC second — in
+    that case `fp` refuses and asks you to wait a moment, rather than
+    silently wiping the prior dir. If the target directory has uncommitted
+    git changes, `fp` will ask before overwriting — pass `--quick` to
+    bypass that guard.
 
     Behind the scenes `fp` shells `docker compose exec site wp fp snapshot
     ...` and `docker cp` to extract; if the stack isn't running it prints
@@ -181,28 +188,37 @@ not a WordPress capability check.
 
   <Step title="Commit and tag">
     ```bash
-    git checkout -b feat/<slug>
+    git checkout -b feat/snapshot-<short-description>
     git add web/imports/<slug>/
     git commit -m "Snapshot: <description>"
-    git push -u origin feat/<slug>
+    git push -u origin feat/snapshot-<short-description>
     # → PR → review → merge → git tag vX.Y.Z → CI builds + pushes
     #   ghcr.io/<your-org>/<your-site>:vX.Y.Z
     ```
+
+    **No `git rm`** of the previous snapshot dir — older
+    `web/imports/<timestamp>/` directories are intentional history.
+    The chart picks the snapshot with the highest `manifest.created`
+    at deploy time, so accumulating dirs is fine.
   </Step>
 
   <Step title="Deploy">
     Bump `imageTag` in your GitOps overlay (or `helm upgrade --set
-    image.tag=vX.Y.Z` for vanilla Helm). The chart's install Job runs
-    `wp fp apply --snapshot-dir=/app/web/imports/<slug>` on every
-    helm upgrade. Idempotent.
+    image.tag=vX.Y.Z` for vanilla Helm). The chart's install Job
+    (charts ≥ v0.12.0) picks the snapshot with the highest
+    `manifest.created` and runs `wp fp apply --snapshot-dir=<that one>`
+    on every helm upgrade. Idempotent.
   </Step>
 </Steps>
 
 ## What apply does
 
-The chart's install Job iterates every subdirectory of
-`/app/web/imports/` whose `manifest.json` exists and runs
-`wp fp apply` per snapshot. Per snapshot, in order:
+The chart's install Job (charts ≥ v0.12.0) scans every subdirectory of
+`/app/web/imports/` whose `manifest.json` exists, picks the one with
+the highest `created` UTC timestamp, and runs `wp fp apply` against
+it. Older snapshot dirs are skipped (logged as "skipped — older"),
+not deleted — they stay baked in the image as history. Per applied
+snapshot, in order:
 
 1. **Schema check** — reject if not `fp.snapshot/v4`.
 2. **Idempotency check** — compare `manifest.id` and `wxr_sha256`
@@ -356,4 +372,4 @@ is never touched by the designer's pipeline.
 | [`fp`](https://github.com/frankenpress/fp) | Host-side CLI. `fp snapshot` wraps the mu-plugin's `wp fp snapshot` + the post-capture `docker cp` extraction, with interactive slug + note prompts. Installed via the [`homebrew-tap`](https://github.com/frankenpress/homebrew-tap). |
 | [`mu-plugin`](https://github.com/frankenpress/mu-plugin) | Ships the `Fse` adapter + `wp fp snapshot` + `wp fp apply`. v0.12.0+ ships the design/content scope split + designer-asset attachment shipping (option-ref + block-scan). v0.12.2+ includes the apply-side uploads URL retarget. |
 | [`site-template`](https://github.com/frankenpress/site-template) | What you forked from. `web/imports/.gitkeep` is the placeholder for committed snapshots. |
-| [`charts`](https://github.com/frankenpress/charts) | Install Job iterates `web/imports/<slug>/` directories on every helm upgrade. v0.10.0+ provides RW root FS on the install Job for transient WP-Importer install. |
+| [`charts`](https://github.com/frankenpress/charts) | Install Job picks the snapshot under `web/imports/` with the highest `manifest.created` and applies it on every helm upgrade. v0.10.0+ provides RW root FS on the install Job for transient WP-Importer install; v0.12.0+ moves from "fail on >1 snapshot" to "pick latest by `created`". |
