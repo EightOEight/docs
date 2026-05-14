@@ -97,32 +97,35 @@ by FrankenPress:
     ```bash
     git clone git@github.com:<your-org>/<your-site>.git
     cd <your-site>
-    make setup    # composer install + .env from .env.example
-    make up       # docker compose up -d (site + db + redis + minio)
-    ```
-  </Step>
-  <Step title="Install WordPress">
-    ```bash
-    make wp ARGS="core install \
-      --url=http://localhost:8080 \
-      --title='My Site' \
-      --admin_user=admin \
-      --admin_email=admin@example.com \
-      --admin_password=admin \
-      --skip-email"
+    fp init
     ```
 
-    Visit `http://localhost:8080/wp/wp-admin/` and log in.
+    `fp init` scaffolds `.env` from `.env.example`, runs `composer install`
+    via docker (no PHP needed on host), brings the stack up
+    (`docker compose up -d --wait`), installs WordPress with sensible
+    local defaults (`admin / admin / admin@example.test`), and applies
+    the latest committed snapshot if there is one. Re-run it after
+    `docker compose down -v` to recover from a wiped local stack.
+
+    Visit `http://localhost:8080/wp/wp-admin/` and log in (override
+    credentials via `[init]` in `frankenpress.toml`).
 
     <Note>
-      This is a one-time step for local Docker Compose dev. The
-      [`charts`](/components/charts#first-install) Helm chart
-      runs `wp core install` automatically as a post-install hook
-      Job — that's a Helm-only mechanism, so the local Compose stack
-      still needs the manual command above.
+      The [`charts`](/components/charts#first-install) Helm chart runs
+      `wp core install` automatically as a post-install hook Job on
+      cluster deploys — that's a Helm-only mechanism, so this `fp init`
+      flow is only relevant for local Docker Compose dev.
     </Note>
 
     <Tip>
+      Lower-level alternative if you'd rather drive each step manually:
+      ```bash
+      make setup    # composer install + .env from .env.example
+      make up       # docker compose up -d
+      make wp ARGS="core install --url=http://localhost:8080 \
+        --title='My Site' --admin_user=admin \
+        --admin_email=admin@example.com --admin_password=admin --skip-email"
+      ```
       `make wp` injects `--allow-root --path=/app/web/wp` into every
       invocation — WordPress core lives at `web/wp/` per the Bedrock
       layout, so wp-cli won't auto-discover it from the container's
