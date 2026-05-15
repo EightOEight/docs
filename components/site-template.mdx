@@ -161,9 +161,9 @@ composer-installed content but unhides anything you commit explicitly.
 
 ## Lockdown
 
-`DISALLOW_FILE_EDIT` and `DISALLOW_FILE_MODS` in `config/application.php`
-are **gated on `KUBERNETES_SERVICE_HOST`** — the env var the kubelet
-injects into every Pod:
+`DISALLOW_FILE_EDIT`, `DISALLOW_FILE_MODS`, and `DISALLOW_INDIRECT_FILE_MODS`
+in `config/application.php` are **gated on `KUBERNETES_SERVICE_HOST`** — the
+env var the kubelet injects into every Pod:
 
 ```php
 $fp_in_kubernetes = (bool) getenv( 'KUBERNETES_SERVICE_HOST' );
@@ -171,30 +171,58 @@ $fp_allow_mods    = filter_var( getenv( 'FP_ALLOW_FILE_MODS' ), FILTER_VALIDATE_
 $fp_lockdown      = $fp_in_kubernetes && ! $fp_allow_mods;
 Config::define( 'DISALLOW_FILE_EDIT', $fp_lockdown );
 Config::define( 'DISALLOW_FILE_MODS', $fp_lockdown );
+Config::define( 'DISALLOW_INDIRECT_FILE_MODS', $fp_lockdown );
 ```
 
-In-cluster: both are `true` — the "Update WordPress / plugins / themes"
+In-cluster: all three are `true` — the "Update WordPress / plugins / themes"
 buttons are absent and admin-side installs hard-fail. Out-of-cluster
-(docker-compose, bare local): both are `false` so designers can install
+(docker-compose, bare local): all three are `false` so designers can install
 block plugins / evaluation themes locally and promote the result into
 the image + DB via `wp fp snapshot`. Prod can't accidentally land in the
 relaxed mode — the kubelet always sets `KUBERNETES_SERVICE_HOST`.
 
+`DISALLOW_INDIRECT_FILE_MODS` (WP 6.4+) is the third flag because the
+other two miss indirect write paths — language-pack downloads, font
+installs, and Site Health helper writes go through `request_filesystem_credentials()`
+rather than the plugin/theme installer, and would otherwise still land
+on ephemeral pod disk.
+
 `FP_ALLOW_FILE_MODS=1` is a narrow opt-out used by the chart's install
 Job only (so `wp plugin install` can run transiently inside the Job for
 snapshot apply). Web Pods, wpcron Pods, and init containers never see
-it.
+it. Setting it flips all three flags back off in lockstep.
 
 Plus in `production.php`, hard-coded with no gate:
 
 ```php
 Config::define( 'AUTOMATIC_UPDATER_DISABLED', true );
 Config::define( 'WP_AUTO_UPDATE_CORE', false );
+Config::define( 'WP_AUTO_UPDATE_PLUGINS', false );
+Config::define( 'WP_AUTO_UPDATE_THEMES', false );
 ```
+
+`AUTOMATIC_UPDATER_DISABLED` covers core / translations / themes / plugins as
+a top-level kill switch; the three explicit `WP_AUTO_UPDATE_*` flags are
+defense in depth so a future WP release that loosens the umbrella check
+still finds an explicit `false` for each surface.
 
 The container image is the source of truth in-cluster — admin-side
 plugin installs would land on ephemeral disk and disappear on pod
 restart, replicating inconsistently across replicas.
+
+### Auth keys required at boot
+
+`config/application.php` lists all eight WordPress auth keys + salts
+(`AUTH_KEY`, `SECURE_AUTH_KEY`, `LOGGED_IN_KEY`, `NONCE_KEY`, plus the
+matching `_SALT` siblings) in `Dotenv->required()`. A missing value
+fails loud at boot — Bedrock raises a `RuntimeException` before WP is
+loaded — instead of silently falling back to `'put your unique phrase
+here'` and degrading session crypto across the cluster.
+
+Local dev keeps the `dev-key` / `dev-salt` defaults from
+`docker-compose.yml`. Production must inject real values via your
+cluster's secret manager (the chart's `keysSalts.existingSecret` or
+External Secrets Operator).
 
 ## CI / publishing
 

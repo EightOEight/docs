@@ -339,10 +339,23 @@ helm repo add stakater https://stakater.github.io/stakater-charts
 helm install reloader stakater/reloader -n reloader --create-namespace
 ```
 
-Then opt the site workload into auto-reloads in your values. Use
-`commonAnnotations`, **not** `podAnnotations` — Reloader watches the
-Deployment object's `metadata.annotations`, not the pod-template's
-`spec.template.metadata.annotations`:
+Then opt the site workload into auto-reloads. Chart **v0.13.0+** ships
+a typed `reloader` block — set `enabled: true` and list the Secret
+names you want watched, and the chart emits the correct
+`secret.reloader.stakater.com/reload: "<csv>"` annotation on the
+Deployment object (where Reloader actually looks):
+
+```yaml
+reloader:
+  enabled: true
+  secretsToWatch:
+    - mysite-smtp
+    - mysite-keys
+    - mysite-db-credentials
+```
+
+For broad "watch every referenced Secret/ConfigMap" coverage, the
+pre-v0.13 `commonAnnotations` form still works as a fallback:
 
 ```yaml
 commonAnnotations:
@@ -351,13 +364,10 @@ commonAnnotations:
   reloader.stakater.com/auto: "true"
 ```
 
-Or — more conservative — pin specific Secrets:
-
-```yaml
-commonAnnotations:
-  # Only restart on changes to these named Secrets.
-  secret.reloader.stakater.com/reload: "mysite-smtp,mysite-keys,mysite-db-credentials"
-```
+The typed block is the recommended path because it puts the annotation
+on the Deployment's `metadata.annotations` automatically — Reloader
+ignores annotations on the pod template (`spec.template.metadata.annotations`),
+which is the gotcha that `commonAnnotations` exists to work around.
 
 <Note>
   `commonAnnotations` is applied to every resource the chart renders
