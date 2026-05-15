@@ -16,7 +16,7 @@ The chart is published as an OCI artifact on GHCR:
 
 ```bash
 helm install mysite oci://ghcr.io/frankenpress/charts/site \
-  --version 0.12.3 \
+  --version 0.13.2 \
   --namespace mysite --create-namespace
 ```
 
@@ -115,6 +115,9 @@ the most-used keys:
 | `smtp.host` / `smtp.port` / `smtp.encryption` | `""` / `587` / `tls` | SMTP server, TCP port, transport encryption (`tls` for STARTTLS, `ssl` for implicit TLS, `""` for plaintext local-dev only). |
 | `smtp.auth.existingSecret` | `""` | Required when `smtp.enabled=true` and the server requires auth. Secret keys default to `username` / `password`; override via `smtp.auth.usernameKey` / `passwordKey`. Leave empty for unauthenticated in-cluster relays. |
 | `tmpfsSize.tmp` / `data` / `config` | `256Mi` / `64Mi` / `16Mi` | tmpfs sizes for the read-only-root pod |
+| `reloader.enabled` / `reloader.secretsToWatch` | `false` / `[]` | First-class [Stakater Reloader](https://github.com/stakater/Reloader) integration. Set `enabled: true` and list Secret names to emit a `secret.reloader.stakater.com/reload: "<csv>"` annotation on the Deployment that auto-rolls Pods on Secret changes. Supersedes the older `commonAnnotations` pattern (which still works as a fallback). Requires Reloader installed cluster-wide; safe when it isn't (annotation becomes inert). Chart **v0.13.0+**. |
+| `podDisruptionBudget.enabled` / `minAvailable` / `maxUnavailable` | `false` / `1` / `null` | Render a `PodDisruptionBudget`. Recommended for `replicaCount >= 2` or `autoscaling.enabled=true` so node drains and cluster upgrades don't take all replicas at once. Disabled by default — a single-replica deploy can't satisfy a PDB without making drains hang. Chart **v0.13.0+**. |
+| `startupProbe.enabled` | `true` | HTTP `GET /healthz` startup probe gating liveness/readiness. Protects first-boot pods (snapshot apply, runtime cold-start) from being killed by readiness failures. Default on; turn off only if you've ripped out the runtime's health endpoint. Chart **v0.13.0+**. |
 
 A condensed reference is at [Operations → Configuration](/operations/configuration).
 
@@ -191,12 +194,14 @@ so the Pod actually rolls when the Secret changes:
 # values.yaml
 syncAdminCredentials: true   # default — initContainer on every site Pod
 
-commonAnnotations:
-  # Reloader watches the install Secret and rolls the Deployment when
-  # admin_password / admin_email change. commonAnnotations lands on
-  # the Deployment's metadata.annotations (where Reloader looks);
-  # podAnnotations lands on the pod-template (which Reloader ignores).
-  secret.reloader.stakater.com/reload: "<release>-site-install"
+# Chart v0.13.0+ ships a typed Reloader block. The chart emits the
+# correct `secret.reloader.stakater.com/reload` annotation on the
+# Deployment (where Reloader actually looks) — no need to remember the
+# annotation name or the commonAnnotations vs. podAnnotations gotcha.
+reloader:
+  enabled: true
+  secretsToWatch:
+    - <release>-site-install
 ```
 
 Once that's wired, the full flow is automatic:
