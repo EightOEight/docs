@@ -1,0 +1,262 @@
+---
+title: "fp pull — design against real prod content"
+description: "Fetch the production site's content into your local stack so themes can be built against real-volume, real-shape data."
+icon: "cloud-arrow-down"
+---
+
+When a designer needs to build a theme or layout that looks right under real
+content, the thin demo stub committed to `web/imports/` isn't enough.
+`fp pull` downloads a fresh capture of the production site (posts, pages,
+attachments, FSE templates) from a per-tenant S3 bucket into a
+gitignored working dir, so `fp apply` can stage it into the local
+stack just like a committed snapshot.
+
+<Note>
+The capture itself happens in the prod cluster — the mu-plugin's
+`SnapshotExporter` component runs `wp fp snapshot` on a daily wp-cron
+event at site-local midnight (and on-demand via the WP admin button at
+Tools → Snapshot Export). `fp pull` only downloads what's already up
+there.
+</Note>
+
+## What gets captured
+
+The wire format is the existing `fp.snapshot/v5` envelope used by
+`fp snapshot`. The PII allowlist is the same:
+
+| In | Out |
+|---|---|
+| `wp_posts` (post / page / attachment) | `wp_users` |
+| FSE templates, template parts, global styles, navigation | `wp_comments` |
+| Allowlisted `wp_options` (site title, page-refs, theme mods) | `wp_usermeta` |
+| Attachment refs in `post_content` | `wp_user_meta` |
+|  | `wp_options` outside the allowlist (transients, tokens) |
+
+Attachments come down as `wp_posts` rows only — no binary blobs in the
+bundle. The browser fetches the actual assets directly from the prod
+uploads bucket (the same one `humanmade/s3-uploads` serves the live
+site from), so designer pages render with working images without any
+GB-sized snapshot transfers.
+
+## One-time setup
+
+### 1. Add the `[pull]` block to your site's `frankenpress.toml`
+
+```toml
+[pull]
+bucket  = "sts-production-snapshots-eu-west-2-533158516642"
+profile = "mkennedy"      # optional; passed as `aws --profile`
+# region = "eu-west-2"    # optional; falls through to aws CLI resolution
+```
+
+The bucket name comes from your tenant's infrastructure — typically
+`<site>-production-snapshots-<region>-<account>`. Check with whoever
+manages your `tg_frankenpress` Terragrunt setup if you're not sure.
+
+### 2. Confirm your AWS credentials are wired
+
+`fp pull` shells out to `aws s3` — no AWS SDK, no fp-specific
+credential discovery. Whatever you'd use to run `aws s3 ls` works:
+
+```bash
+aws-vault exec mkennedy -- aws s3 ls s3://sts-production-snapshots-...
+```
+
+The canonical path is `sts:AssumeRole` into the prod account's `Admin`
+role (the `AllowAssumeAdminInProd` policy in `tg-security`). Anything
+that reaches that role gets read access to the snapshot bucket
+automatically — no per-designer S3 policy edit needed.
+
+## Daily loop
+
+### Pull the latest snapshot
+
+```bash
+fp pull
+```
+
+Picks the newest available snapshot from the bucket (slugs are ISO-8601
+UTC timestamps, so lex-sort = chronological), downloads it to
+`.fp/prod-snapshots/<slug>/`, drops a `.gitignore` stub inside
+`.fp/prod-snapshots/` so the content can't be accidentally committed.
+
+### List what's available without downloading
+
+```bash
+fp pull --list
+```
+
+```text
+snapshots in s3://sts-production-snapshots-eu-west-2-533158516642/:
+  prod-2026-05-16T00-00-00Z
+  prod-2026-05-15T00-00-00Z
+  prod-2026-05-14T00-00-00Z
+```
+
+### Download a specific slug
+
+```bash
+fp pull --slug prod-2026-05-15T00-00-00Z
+```
+
+Useful when you want "before that customer-import spike" or are debugging
+a regression a designer noticed Tuesday.
+
+### Apply the pulled snapshot
+
+`fp apply` looks in **both** `web/imports/` (committed designer
+captures) and `.fp/prod-snapshots/` (pulled prod captures) when picking
+the latest:
+
+```bash
+fp apply                                # latest across both dirs
+fp apply prod-2026-05-15T00-00-00Z      # explicit pulled-snapshot slug
+```
+
+The two dirs serve different roles. `web/imports/` is committed
+history — what the site is supposed to look like. `.fp/prod-snapshots/`
+is ephemeral — a working corpus for theme dev, re-pulled when stale,
+gitignored automatically.
+
+### See both sources in `fp list`
+
+```bash
+fp list
+```
+
+```text
+SLUG                          SOURCE     CREATED            T   O   A   NOTE
+prod-2026-05-16T00-00-00Z     pulled     2026-05-16 00:00   42  18  153 fp-snapshot-export
+sts-launch                    committed  2026-05-14 09:18   12  9   23  initial launch
+designer-2026-05-13           committed  2026-05-13 14:22   12  9   25  page tweaks
+```
+
+## How prod is publishing the snapshots
+
+You don't have to touch the cluster side, but here's what it does so
+the bucket isn't a black box:
+
+<Steps>
+<Step title="Daily wp-cron event">
+The mu-plugin's `SnapshotExporter` component registers
+`frankenpress_snapshot_export` to fire daily at site-local midnight
+(`wp_timezone()`). The K8s wp-cron CronJob picks it up the next time
+`wp cron event run` polls (within ~60s).
+</Step>
+<Step title="On-demand admin button">
+The same hook also runs when an admin clicks **Tools → Snapshot Export
+→ Queue snapshot for next cron tick**. The button schedules a one-shot
+event on the same hook, so capture always runs in the wp-cron
+CronJob's WP-CLI context (where `wp export` is available).
+</Step>
+<Step title="In-process capture + upload">
+The component calls the existing `wp fp snapshot` capture machinery
+(no new pipeline) and uploads each output file to
+`s3://<bucket>/prod-<timestamp>/` via the AWS PHP SDK that
+`humanmade/s3-uploads` already loads. No new container, no aws-cli
+in the image.
+</Step>
+<Step title="7-day bucket lifecycle">
+`tg_frankenpress` provisions the bucket with a 7-day S3 lifecycle
+rule, so the prefix accumulates a small history without unbounded
+growth. Combined with the daily fire, designers get a rolling
+window of "yesterday's prod" through "last week's prod".
+</Step>
+</Steps>
+
+## Author rewrite on apply
+
+`wp_users` isn't in the snapshot allowlist, so the captured author IDs
+don't resolve locally. The mu-plugin's `AuthorRemapper` rewrites
+`post_author` to your local admin (user ID 1) on every imported row
+during `fp apply`. Without this, the WP Media Library and Posts list
+render every imported entry as "(no author)".
+
+The rewrite is gated by `FP_APPLY_REMAP_AUTHORS=1`, which the apply
+pipeline sets transiently for the duration of the `wp import`
+subprocess. Normal site operations don't see the env var, so the
+filter is registered only during an in-flight apply.
+
+## Operator opt-in
+
+A tenant's prod chart needs `snapshotExport.enabled=true` for the
+SnapshotExporter to wake up. See
+[`components/charts`](/components/charts) for the values block. The
+default is `false`, so non-opted-in tenants run identical chart code
+with zero overhead.
+
+```yaml
+snapshotExport:
+  enabled: true
+  bucket: sts-production-snapshots-eu-west-2-533158516642
+  existingSecret: sts-snapshot-export-creds   # ESO-projected from ASM
+```
+
+The K8s Secret is typically projected from AWS Secrets Manager
+(`service_user/prod/<site>-production-snapshots`) via an
+ExternalSecret CR in the GitOps repo. The IAM policy on the bucket
+service user is scoped to `s3:PutObject` + `s3:ListBucket` only — no
+read, no delete — so even if the pod is compromised the worst case is
+junk in the bucket that the 7-day lifecycle reaps.
+
+## Out of scope (for v1)
+
+- **Auto-apply on pull.** `fp pull && fp apply` is two commands by
+  design; the separation lets you inspect (`fp diff`) before applying.
+- **Selective table / scope pull.** Snapshot is the unit. If you need
+  just the templates, pull the whole bundle and selectively apply.
+- **Multi-env.** Prod-only. Staging environments today are designer
+  dev-tier; staging-snapshot use cases haven't surfaced.
+- **`fp prune` for `.fp/prod-snapshots/`.** The 7-day server-side
+  lifecycle does the work on the cluster side; `rm -rf
+  .fp/prod-snapshots/<slug>` is the explicit local cleanup path.
+  `fp prune` operates on the committed dir only.
+
+## Troubleshooting
+
+<AccordionGroup>
+<Accordion title="`[pull].bucket is not set in frankenpress.toml`">
+The `[pull]` block is required only when `fp pull` is invoked.
+Sites that don't pull leave it unset. Add it with the name of your
+tenant's snapshot bucket (e.g.
+`sts-production-snapshots-eu-west-2-533158516642`).
+</Accordion>
+
+<Accordion title="`no snapshots in s3://<bucket>/`">
+Two possibilities:
+
+1. The cluster-side `snapshotExport.enabled` isn't true on the tenant
+   chart — check with whoever owns the GitOps repo.
+2. The daily wp-cron hasn't fired yet on a freshly-enabled tenant.
+   Either wait until the next site-local midnight, or click
+   **Tools → Snapshot Export → Queue snapshot for next cron tick** on
+   the production site to seed the bucket immediately.
+</Accordion>
+
+<Accordion title="`aws s3 sync` exits non-zero">
+The error message includes aws's own stderr. Common cases:
+
+- **`AccessDenied`** — your shell isn't authenticated against the
+  prod account. Wrap your command in `aws-vault exec mkennedy --` or
+  check `aws sts get-caller-identity`.
+- **`NoSuchBucket`** — the `[pull].bucket` name is wrong or the
+  bucket hasn't been provisioned. Confirm with whoever owns the
+  Terragrunt setup.
+- **`InvalidAccessKeyId`** — your local AWS credentials are stale.
+  Re-authenticate.
+</Accordion>
+
+<Accordion title="Slug collision between committed and pulled">
+If a captured slug exists in both `web/imports/<slug>/` and
+`.fp/prod-snapshots/<slug>/`, `fp apply` (and `fp delete`) hard-error
+rather than silently picking one. The two dirs are meant to be
+disjoint. Rename or remove the duplicate.
+</Accordion>
+</AccordionGroup>
+
+## Related
+
+- [`/designer-flow`](/designer-flow) — the full local capture / apply / release loop
+- [`/components/mu-plugin`](/components/mu-plugin) — the `SnapshotExporter` component and the `wp fp` WP-CLI surface
+- [`/components/charts`](/components/charts) — the `snapshotExport.*` chart values
+- [`/operations/configuration`](/operations/configuration) — the full env-var reference

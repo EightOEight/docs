@@ -91,6 +91,25 @@ When `FP_SMTP_HOST` is unset, `wp_mail()` falls through to PHP's
 sets `smtp.enabled=true` to wire the env above; see
 [Operations → Email](/operations/email) for provider recipes.
 
+## mu-plugin: SnapshotExporter
+
+Daily wp-cron + admin-button capture-and-upload to a per-tenant S3
+snapshot bucket. Drives the prod-side half of [`fp pull`](/designer-flow-fp-pull).
+Dormant when `FP_SNAPSHOT_BUCKET` is unset — zero overhead on
+non-opted-in tenants.
+
+| Var | Default | Required | Notes |
+|---|---|---|---|
+| `FP_SNAPSHOT_BUCKET` | (unset) | yes (when opting in) | Snapshot bucket name (e.g. `sts-production-snapshots-eu-west-2-533158516642`). Component is dormant when unset. |
+| `FP_SNAPSHOT_KEY` | (unset) | yes (when opting in) | AWS access key id for the snapshot-bucket service user |
+| `FP_SNAPSHOT_SECRET` | (unset) | yes (when opting in) | AWS secret access key for the same user |
+| `FP_SNAPSHOT_REGION` | `eu-west-2` | | AWS region of the snapshot bucket |
+| `FP_APPLY_REMAP_AUTHORS` | (unset) | | Apply-time only — set transiently by Restorer before `wp import` to rewrite imported `post_author` to the local admin. Never set this manually. |
+
+The chart's `snapshotExport.*` values surface map to these env vars
+(see [`components/charts`](/components/charts)). The K8s Secret is
+typically projected from AWS Secrets Manager via ExternalSecret.
+
 ## Build args (runtime)
 
 Set at image build time with `--build-arg`:
