@@ -16,9 +16,10 @@ log handlers) is **optional** and is the consumer site's responsibility.
 | [**SouinInvalidator**](#souininvalidator) | `DEL`s Souin's Redis cache entries directly on `save_post`, `clean_post_cache`, `switch_theme`, etc. — bypasses cache-handler's broken HTTP invalidation. |
 | [**SiteHealth**](#sitehealth) | Suppresses the Site Health tests whose failure is intentional under the immutable-image lockdown (`background_updates`, FS-write probes, `plugin_theme_auto_updates`) and adds a passing FrankenPress-branded test that explains why. Also adds an SMTP-reachability test when SMTPMailer is configured. |
 | [**SMTPMailer**](#smtpmailer) | Wires the global PHPMailer to send via SMTP from `FP_SMTP_*` env vars. The runtime image ships no MTA, so without this every `wp_mail()` call fails silently. Transport-agnostic (Postmark, SendGrid, Mailgun, AWS SES, in-cluster relay). Opt-in: no-op when `FP_SMTP_HOST` is unset. |
-| [**`wp fp` CLI**](#wp-fp-cli) *(WP-CLI only)* | Registers `wp fp snapshot` + `wp fp apply` subcommands for the [designer flow](/designer-flow). Adapter-scoped, WXR-based, additive. Schema `fp.snapshot/v3`. Only loads under `WP_CLI` — zero overhead on web requests. |
+| [**SnapshotExporter**](#snapshotexporter) | Captures site state (`fp.snapshot/v5`) and uploads to a per-tenant S3 snapshot bucket on a daily wp-cron event at site-local midnight + an admin button under Tools → Snapshot Export. Drives the prod-side half of [`fp pull`](/designer-flow-fp-pull). Opt-in: no-op when `FP_SNAPSHOT_BUCKET` is unset. |
+| [**`wp fp` CLI**](#wp-fp-cli) *(WP-CLI only)* | Registers `wp fp snapshot` + `wp fp apply` subcommands for the [designer flow](/designer-flow). Adapter-scoped, WXR-based, additive. Schema `fp.snapshot/v5`. Apply-time `AuthorRemapper` rewrites imported `post_author` to the local admin (gated on `FP_APPLY_REMAP_AUTHORS`, set transiently by the apply pipeline). Only loads under `WP_CLI` — zero overhead on web requests. |
 
-Composer name: `frankenpress/mu-plugin`. Latest release: `v0.12.2`.
+Composer name: `frankenpress/mu-plugin`. Latest release: `v0.15.1`.
 
 ## S3UploadsBootstrap
 
@@ -180,6 +181,53 @@ config — those plugins run as regular plugins after must-use plugins
 and re-hook `phpmailer_init` at the same priority. Last-writer wins.
 Correct behaviour: the user opted into the plugin explicitly; we don't
 fight them.
+
+## SnapshotExporter
+
+Drives the prod-side half of [`fp pull`](/designer-flow-fp-pull).
+Two entry points, one code path:
+
+- **Daily wp-cron event** (`frankenpress_snapshot_export`) fires at
+  site-local midnight (`wp_timezone()`). Picked up by the K8s wp-cron
+  CronJob's `wp cron event run --due-now` invocation, so capture runs
+  in a WP-CLI process where `\WP_CLI::runcommand` is available (the
+  inner `wp export` needs it).
+- **Admin button** under Tools → Snapshot Export schedules a one-shot
+  event on the same hook. Shows "queued" — the actual capture runs
+  in the next wp-cron tick (~60s).
+
+Capture reuses the existing `wp fp snapshot` machinery via a shared
+`Cli\Snapshot\Factory`. Upload uses `Aws\S3\S3Client::putObject` per
+file — the AWS SDK is already a transitive dep through humanmade/
+s3-uploads, no composer change needed.
+
+### Required env vars
+
+```bash
+FP_SNAPSHOT_BUCKET   # gating + bucket name; component is dormant when unset
+FP_SNAPSHOT_KEY      # AWS access key id (typically ESO-projected from ASM)
+FP_SNAPSHOT_SECRET   # AWS secret access key
+FP_SNAPSHOT_REGION   # optional; defaults to eu-west-2
+```
+
+### Wire format + cadence
+
+Same `fp.snapshot/v5` envelope used by `wp fp snapshot`. PII allowlist
+unchanged: posts/pages/attachments + FSE templates + allowlisted
+options. **No** `wp_users` / `wp_comments` / `wp_usermeta`. Captured
+attachments are `wp_posts` rows only — designers consume the actual
+binaries from the production uploads bucket directly via
+`humanmade/s3-uploads`.
+
+The bucket is provisioned by `tg_frankenpress` (one per production
+site, named `<site>-production-snapshots-<region>-<account>`,
+**7-day lifecycle**). The service-user IAM policy is scoped to
+`s3:PutObject` + `s3:ListBucket` only — no read, no delete. Worst
+case under a pod compromise is junk in the bucket that the lifecycle
+reaps.
+
+The chart's `snapshotExport.*` values map directly to these env vars
+([`/components/charts`](/components/charts)).
 
 ## wp fp CLI
 
